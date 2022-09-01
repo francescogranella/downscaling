@@ -1,0 +1,95 @@
+\ProvidesPackage{mypreamble}
+
+\usepackage{lmodern}
+\usepackage{amsthm, amsmath,fullpage,setspace,appendix,graphicx, float}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{standalone}
+\usepackage{tabularx}
+\usepackage{caption,subcaption}
+\usepackage{float}  % for overriding image position in the page
+\usepackage{sidecap}
+\usepackage{pgffor}
+\usepackage[authoryear]{natbib}
+\UseRawInputEncoding
+\usepackage{textcomp}% for '\textdegree' macro
+\usepackage[colorlinks,citecolor=black]{hyperref}
+
+\usepackage{thmtools}
+\usepackage{enumerate, wasysym, amssymb,tabularx}
+\usepackage{multirow,array,longtable}
+\usepackage{appendix}
+\usepackage[flushleft]{threeparttable}
+\usepackage{authblk}
+\usepackage[all]{nowidow}
+\usepackage{adjustbox}
+\usepackage{epigraph}
+\usepackage{multicol}
+\usepackage{lineno}
+\usepackage{chngcntr}
+\usepackage{ltablex}
+\usepackage{doi}
+\usepackage{markdown}
+
+\usepackage{pdflscape}
+\usepackage{afterpage}
+
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\usepackage{import}
+
+% \renewcommand{\familydefault}{\sfdefault}
+% % All document in typewriter font!
+% % unfortunately doesn't look good with tables.
+% \usepackage[T1]{fontenc}
+% \renewcommand*\familydefault{\ttdefault} %% Only if the base font of the document is to be typewriter style
+% % Make the typewriter justify
+% \usepackage{everysel}
+% \EverySelectfont{%
+	% 	\fontdimen2\font=0.4em% interword space
+	% 	\fontdimen3\font=0.2em% interword stretch
+	% 	\fontdimen4\font=0.1em% interword shrink
+	% 	\fontdimen7\font=0.1em% extra space
+	% 	\hyphenchar\font=`\-% to allow hyphenation
+	% }
+% % another option (among many fonts) is lcmtt
+% %\renewcommand*\ttdefault{lcmtt}
+% %\renewcommand*\familydefault{\ttdefault} %% Only if the base font of the document is to be typewriter style
+
+% % Background and text color
+ \usepackage{xcolor}
+% \pagecolor[HTML]{FBFBF1}  % Snow: FBFBFB
+% \color[HTML]{333333}
+%\pdfminorversion=6
+
+\linespread{1.75}
+%\usepackage[left=2.00cm, right=2.00cm, top=2.00cm, bottom=2.00cm]{geometry}
+\usepackage[left=4.00cm, right=4.00cm, top=4.00cm, bottom=4.00cm]{geometry}
+
+% This, I don't remember what's for. But I've used it in the past
+\usepackage{sectsty}
+
+\usepackage[normalem]{ulem}  % Necessar for underlining
+
+\sectionfont{\normalfont%\scshape
+	\centering} % \underline must be the last in this list
+% \subsectionfont{\underline}  % \underline must be the last in this list
+% \subsectionfont{\normalfont\scshape}
+\chapternumberfont{\Large\centering}
+\chaptertitlefont{\Large\centering}
+
+\renewcommand{\TPTminimum}{\linewidth}
+\newcommand{\tablewidenotes}[1]{\makebox[\linewidth]{\input{#1}}}
+
+%  Quickly make certain pieces of code/text  available or not.
+\newif\iflong
+\longtrue % switch to \longfalse in short version
+\newcommand{\inLongVersion}[1]{\iflong #1\fi}
+
+
+\renewcommand{\bibname}{References}
+\newcommand{\docsfolder}{..}
+\def\sym#1{\ifmmode^{#1}\else\(^{#1}\)\fi}
