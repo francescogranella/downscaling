@@ -125,47 +125,6 @@ for name, ds in datasets_dict.items():
     ds = agg_on_time(ds, func='mean')
     agg_on_space(ds, func='weighted_mean', weight=ds.population)
 
-    ds2 = ds.isel(time=0)
-    xr.combine_by_coords([ds,ds2])
-    # Convert the CMIP raster to DataFrame and assign the population
-    # metadata
-    source_id = ds.attrs['source_id']
-    varname = ds.attrs['variable_id']
-    missing_value = 1e+20  # by convention. Shouldn't be necessary with intake_esm
-    # replace placeholder for missing values with nan
-    ds = ds.where(ds != missing_value)
-    # keep vars of interest and drop leftover vars from combined_processing
-    ds = ds[['time', 'x', 'y', varname]].drop(['lon', 'lat'])
-    # time in datetime format
-    if not isinstance(ds.indexes['time'], pd.DatetimeIndex):
-        ds['time'] = ds.indexes['time'].to_datetimeindex()
-    # Possibly aggregate over time:
-    example = False
-    if example:
-        # Monthly average
-        ds['pr'].resample(time='M').mean()
-    # convert to pandas dataframe
-    df = ds.to_dataframe().reset_index()
-    # keep date / remove time
-    df['time'] = pd.to_datetime(df.time.dt.date)
-    # rename vars
-    df.rename(columns={'x':'lon', 'y':'lat'}, inplace=True)
-    # merge with GeoDataFrame of population counts
-    df = pd.merge(df[['time', 'lat', 'lon', varname]], weight_vector[['lat', 'lon', 'population', 'iso3']], on=['lon', 'lat'], how='inner')
-
-    assert {'time', 'lat', 'lon', 'population', 'iso3'}.issubset(set(df.columns))
-
-    print(df.head())
-    # TODO make sure the same unit is used for the same variable
-
-    # Examples
-    # general_agg(df, varname, agg_time_first=True, time_aggfun='max', space_aggfun=lambda x: w_avg(x, varname, 'population'))
-    # general_agg(df, varname, agg_time_first=False, time_aggfun='max', space_aggfun=lambda x: w_avg(x, varname, 'population'))
-    # general_agg(df, varname, agg_time_first=True, time_aggfun='max', space_aggfun=np.mean)
-    # general_agg(df, varname, agg_time_first=False, time_aggfun='max', space_aggfun=np.mean)
-
-    general_agg(df, varname, agg_time_first=True, time_aggfun='max', space_aggfun=np.mean).\
-        to_parquet(context.projectpath() + f'/data/out/{path.stem}.parq')
 
     # Save metadata
     with open(context.projectpath() + f'/data/out/{path.stem}.txt', 'w') as f:
