@@ -2,6 +2,12 @@ import pandas as pd
 import xarray as xr
 
 
+def w_avg(df, values, weights):
+    d = df[values]
+    w = df[weights]
+    return (d * w).sum() / w.sum()
+
+
 def general_agg(df: pd.DataFrame, varname: str, agg_time_first=True, time_aggfun=None, space_aggfun=None) -> pd.DataFrame:
     df = df.copy()  # Safe copy
 
@@ -85,7 +91,7 @@ def _simple_agg(ds, agg_var, func=None, **kwargs):
 
 
 def agg_on_time(ds, func=None, **kwargs):
-    return _simple_agg(ds, agg_var='time', func=func, **kwargs)
+    return _simple_agg(ds.groupby('time.year'), agg_var='time', func=func, **kwargs)
 
 
 def agg_on_model(ds, func=None, **kwargs):
@@ -99,3 +105,12 @@ def agg_on_space(ds, func=None, weight=None, **kwargs):
         ds = ds.weighted(weight)
         func = func.replace('weighted_', '')
         return _simple_agg(ds, agg_var=('x', 'y'), func=func, **kwargs)
+
+
+def aggregate(order='MST', *args, **kwargs):
+    import itertools
+    if not tuple('MST') in list(itertools.permutations(['M','S', 'T'])):
+        raise ValueError('Wrong order')
+    d = {'M': agg_on_model, 'S': agg_on_space, 'T': agg_on_time}
+    for agg_order in list(order):
+        return d[agg_order](*args, **kwargs)
