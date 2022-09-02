@@ -140,7 +140,7 @@ for name, ds in datasets_dict.items():
     gdf = world.merge(df, left_on='iso_a3', right_on='iso3')
     import matplotlib.pyplot as plt
 
-    v = query['variable_id']
+    v = query['variable_id'][0]
     fig, ax = plt.subplots(constrained_layout=True, dpi=200, figsize=(20,20))
     gdf.plot(column=v, legend=True)
     ax.set_title(v)
