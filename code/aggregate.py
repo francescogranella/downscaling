@@ -94,31 +94,34 @@ for name, ds in datasets_dict.items():
 
     # Aggregate CMIP6 data using a function of choice over time and space
     ds = combined_preprocessing(ds)
-    # Subset for testing purposes
-    ds = ds.rio.write_crs('EPSG:4326')
-    ds = ds.rio.clip_box(minx=0,maxx=180,miny=0,maxy=60)
+    # # Subset for testing purposes
+    # ds = ds.rio.write_crs('EPSG:4326')
+    # ds = ds.rio.clip_box(minx=0,maxx=180,miny=0,maxy=60)
     # Fix longitude from (0,360) to (-180,180)
     ds['x'] = ds.x.where(ds.x <= 180, ds.x - 360)
     ds = ds.sortby('x')
     ds = ds.sortby('y', ascending=False)
     # Prepare vector
     grid = vectorize_raster(ds)
-    # Zonal statistics: mean population density per CMIP6 cell
-    stat = 'mean'
-    zs = zonal_stats(vectors=grid['geometry'], raster=population.values, affine=population.rio.transform(), stats=stat,
-                     nodata=np.nan, all_touched=True)
-    weight_vector = pd.concat([grid, pd.DataFrame(zs)], axis=1)
-    weight_vector.rename(columns={stat: 'population'}, inplace=True)
-    #  Spatial join: weight polygons in national borders
-    weight_vector = gpd.sjoin(weight_vector, borders, predicate='intersects', how='inner')
-    ds_w = weight_vector.drop(['geometry', 'index_right'], axis=1).set_index(
-        ['x', 'y', 'iso3']).drop_duplicates().to_xarray()
+    # Split the grid where it crosses borders. Each cell is split into polygons, each belonging to 1 country
+    intersections = grid.overlay(borders, how='intersection')
+    # Calculate the population (sum/mean) in each such polygon
+    stat = 'sum'
+    zs = zonal_stats(vectors=intersections['geometry'], raster=population.values, affine=population.rio.transform(),
+                     stats=stat,
+                     nodata=np.nan, all_touched=False)
+    intersections = pd.concat([intersections, pd.DataFrame(zs)], axis=1)
+    intersections.rename(columns={stat: 'population'}, inplace=True)
+    # to xarray
+    ds_w = intersections.drop('geometry', axis=1).set_index(['y', 'x', 'iso3']).to_xarray()
     # merge: add population  to ds
     ds = xr.combine_by_coords([ds, ds_w])
     # assign 0 weight to (x,y,iso3) cells for which (x,y) do not fall into country iso3
     ds['population'] = ds['population'].fillna(0)
     # keep necessary coords, vars
     ds = ds[['x', 'y', 'time'] + list(ds.keys())]
+    if 'plev' in ds.coords:
+        ds = ds.isel(plev=0)
     # Aggregate
     ds = agg_on_model(ds, func='mean')
     ds = agg_on_space(ds, func='weighted_mean', weight=ds.population)
@@ -137,9 +140,9 @@ for name, ds in datasets_dict.items():
     gdf = world.merge(df, left_on='iso_a3', right_on='iso3')
     import matplotlib.pyplot as plt
 
-    fig, axs = plt.subplots(nrows=2, constrained_layout=True, dpi=200, figsize=(20,20))
-    for i, n in enumerate(ds.data_vars):
-        gdf.plot(ax=axs[i], column=n, legend=True)
-        axs[i].set_title(' '.join([n, gdf.year.iloc[0].astype(str)]))
+    v = query['variable_id']
+    fig, ax = plt.subplots(constrained_layout=True, dpi=200, figsize=(20,20))
+    gdf.plot(column=v, legend=True)
+    ax.set_title(v)
     plt.show()
     raise ValueError
