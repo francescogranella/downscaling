@@ -6,7 +6,6 @@ import dask
 import geopandas as gpd
 import intake
 import rioxarray as rioxr
-from mytools import pandastools
 from rasterstats import zonal_stats
 from shapely.geometry import Polygon
 from tqdm import tqdm
@@ -15,7 +14,6 @@ import context
 from functions import *
 
 context.pdsettings()
-pd.merge2 = pandastools.Utils.merge2
 
 
 # %% Function: vectorize the CMIP6 raster
