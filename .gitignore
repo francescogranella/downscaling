@@ -1,7 +1,9 @@
 #### Project
 !.gitkeep
 
-data/*
+data/in/*
+data/out/*
+data/tmp/*
 img/*
 tables/*
 docs/*
