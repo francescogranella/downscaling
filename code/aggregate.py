@@ -127,7 +127,7 @@ for name, ds in datasets_dict.items():
     # Export
     variables = '-'.join([x for x in list(ds.keys()) if x != 'population'])
     name = '.'.join([name, variables])
-    # ds.to_dataframe().reset_index().to_parquet(context.projectpath() + f'/data/out/{name}.parq')
+    ds.to_dataframe().reset_index().to_parquet(context.projectpath() + f'/data/out/{name}.parq')
 
     # Visual sanity check
     world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
