@@ -2,6 +2,7 @@
 from pathlib import Path
 from typing import Union
 
+import dask
 import geopandas as gpd
 import intake
 import rioxarray as rioxr
@@ -9,7 +10,6 @@ from mytools import pandastools
 from rasterstats import zonal_stats
 from shapely.geometry import Polygon
 from tqdm import tqdm
-from xmip.preprocessing import combined_preprocessing
 
 import context
 from functions import *
@@ -18,7 +18,7 @@ context.pdsettings()
 pd.merge2 = pandastools.Utils.merge2
 
 
-# %% Vectorize the CMIP6 raster
+# %% Function: vectorize the CMIP6 raster
 def vectorize_raster(ds: xr.Dataset) -> gpd.GeoDataFrame:
     # Remove time
     ds = ds.copy().isel(time=0)
@@ -36,7 +36,7 @@ def vectorize_raster(ds: xr.Dataset) -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(df[['x', 'y']], geometry=polygons, crs='EPSG:4326')
 
 
-# %% Prepare the population raster for zonal statistics
+# %% Function: prepare the population raster for zonal statistics
 def prepare_pop(path: Union[str, Path]) -> xr.DataArray:
     population = rioxr.open_rasterio(path)
     # Replace fill values
@@ -68,7 +68,6 @@ population = prepare_pop(path)
 # %% For each file, extract the grid (could vary across CMIP6 files), compute and attach population weights to it.
 pass
 # %% Download from Pangeo
-# Pangeo store
 url = "https://storage.googleapis.com/cmip6/pangeo-cmip6.json"
 col = intake.open_esm_datastore(url)
 
@@ -81,12 +80,10 @@ col = intake.open_esm_datastore(url)
 # load multiple models at once
 query = dict(experiment_id=['historical'],
              table_id='Amon',
-             # source_id=['CMCC-CM2-HR4', 'CanESM5', 'CanESM5-CanOE', ],
-             source_id=['CMCC-CM2-HR4'],
+             source_id=['CMCC-CM2-HR4', 'CanESM5', 'CanESM5-CanOE', ],
              variable_id=['ta'],
              grid_label=['gn'])
 cat = col.search(**query)
-import dask
 with dask.config.set(**{'array.slicing.split_large_chunks': True}):
     datasets_dict = cat.to_dataset_dict(zarr_kwargs={'consolidated': True, 'decode_times': True})
 
@@ -114,7 +111,7 @@ for name, ds in datasets_dict.items():
     intersections.rename(columns={stat: 'population'}, inplace=True)
     # to xarray
     ds_w = intersections.drop('geometry', axis=1).set_index(['y', 'x', 'iso3']).to_xarray()
-    # merge: add population  to ds
+    # merge: add population to ds
     ds = xr.combine_by_coords([ds, ds_w])
     # assign 0 weight to (x,y,iso3) cells for which (x,y) do not fall into country iso3
     ds['population'] = ds['population'].fillna(0)
@@ -138,11 +135,9 @@ for name, ds in datasets_dict.items():
     world.loc[world.name == 'Norway', 'iso_a3'] = 'NOR'
     df = ds.isel(year=-1).to_dataframe().reset_index()
     gdf = world.merge(df, left_on='iso_a3', right_on='iso3')
-    import matplotlib.pyplot as plt
-
     v = query['variable_id'][0]
-    fig, ax = plt.subplots(constrained_layout=True, dpi=200, figsize=(20,20))
+    import matplotlib.pyplot as plt
+    fig, ax = plt.subplots(constrained_layout=True, dpi=200, figsize=(20, 20))
     gdf.plot(column=v, legend=True)
     ax.set_title(v)
     plt.show()
-    raise ValueError
