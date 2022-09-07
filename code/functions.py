@@ -88,6 +88,26 @@ def _simple_agg(ds, agg_var, func=None, **kwargs):
     if func == 'quantile':
         if 'q' in kwargs:
             return ds.quantile(kwargs.get('q'))
+    if func == 'gini':
+        if 'weight_var' in kwargs:
+            v = kwargs.get('value_var')
+            w = kwargs.get('weight_var')
+            return xr.apply_ufunc(
+                weighted_gini,
+                ds[v],
+                ds[w],
+                input_core_dims=[('x', 'y'), ('x', 'y')],
+                vectorize=True,
+                dask="parallelized"
+            )
+        else:
+            return xr.apply_ufunc(
+                gini,
+                ds,
+                input_core_dims=[('x', 'y')],
+                vectorize=True,
+                dask="parallelized"
+            )
 
 
 def agg_on_time(ds, func=None, **kwargs):
@@ -114,3 +134,24 @@ def aggregate(order='MST', *args, **kwargs):
     d = {'M': agg_on_model, 'S': agg_on_space, 'T': agg_on_time}
     for agg_order in list(order):
         return d[agg_order](*args, **kwargs)
+
+
+def gini(x):
+    sorted_x = np.sort(x)
+    n = x.size
+    cumx = np.cumsum(sorted_x, dtype=float)
+    # The above formula, with all weights equal to 1 simplifies to:
+    return (n + 1 - 2 * np.sum(cumx) / cumx[-1]) / n
+
+
+def weighted_gini(x, w=None):
+    x = np.asarray(x).flatten()
+    w = np.asarray(w).flatten()
+    sorted_indices = np.argsort(x)
+    sorted_x = x[sorted_indices]
+    sorted_w = w[sorted_indices]
+    # Force float dtype to avoid overflows
+    cumw = np.cumsum(sorted_w, dtype=float)
+    cumxw = np.cumsum(sorted_x * sorted_w, dtype=float)
+    return (np.sum(cumxw[1:] * cumw[:-1] - cumxw[:-1] * cumw[1:]) /
+            (cumxw[-1] * cumw[-1]))
