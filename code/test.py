@@ -31,7 +31,7 @@ df_test = agg_on_model(ds, func='mean').to_dataframe().reset_index()
 assert df_true.equals(df_test)
 # %% Test aggregation on time
 df_true = ds.to_dataframe().groupby(['x', 'y', 'member_id'])['v'].mean().reset_index()
-df_test = agg_on_time(ds, func='mean').to_dataframe().reset_index().drop('year', axis=1)
+df_test = agg_on_year(ds, func='mean').to_dataframe().reset_index().drop('year', axis=1)
 assert df_true.equals(df_test)
 # %% Test simple aggregation on space
 df_true = ds.to_dataframe().groupby(['time', 'member_id'])['v'].mean().reset_index()
