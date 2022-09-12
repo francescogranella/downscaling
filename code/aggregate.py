@@ -57,8 +57,10 @@ CMIP6_simulations_paths = list(Path(context.projectpath() + '/data/in/cmip6/').r
 # %% WB borders
 borders = gpd.read_file(
     context.projectpath() + '/data/in/borders/ne_10m_admin_0_countries_lakes/ne_10m_admin_0_countries_lakes.shp')
-borders = borders[['ADM0_A3', 'geometry']]
-borders.rename(columns={'ADM0_A3': 'iso3'}, inplace=True)
+borders = borders[['ISO_A3', 'geometry']]
+borders.rename(columns={'ISO_A3': 'iso3'}, inplace=True)
+borders = borders[borders.iso3!='-99']
+assert borders.iso3.nunique() == len(borders)
 # %% Prepare population raster
 path = context.projectpath() + r"/data/in/population/gpw-v4-population-count-rev11_2000_2pt5_min_tif/gpw_v4_population_count_rev11_2000_2pt5_min.tif"
 population = prepare_pop(path)
@@ -78,7 +80,7 @@ col = intake.open_esm_datastore(url)
 # load multiple models at once
 query = dict(experiment_id=['historical'],
              table_id='Amon',
-             source_id=['CMCC-CM2-HR4', 'CanESM5', 'CanESM5-CanOE', ],
+             source_id=['CMCC-CM2-HR4'],
              variable_id=['ta'],
              grid_label=['gn'])
 cat = col.search(**query)
@@ -86,16 +88,20 @@ with dask.config.set(**{'array.slicing.split_large_chunks': True}):
     datasets_dict = cat.to_dataset_dict(zarr_kwargs={'consolidated': True, 'decode_times': True})
 
 for name, ds in datasets_dict.items():
-
     # Aggregate CMIP6 data using a function of choice over time and space
+
     ds = combined_preprocessing(ds)
-    # # Subset for testing purposes
-    # ds = ds.rio.write_crs('EPSG:4326')
-    # ds = ds.rio.clip_box(minx=0,maxx=180,miny=0,maxy=60)
-    # Fix longitude from (0,360) to (-180,180)
+    # Fix longitude from (0,360) to (-180,180). Has to be before clipping
     ds['x'] = ds.x.where(ds.x <= 180, ds.x - 360)
     ds = ds.sortby('x')
     ds = ds.sortby('y', ascending=False)
+    # Clip to borders of countries [saves memory]
+    ds = ds.rio.write_crs('EPSG:4326')
+    ds = ds.rio.clip(borders.geometry.values, borders.crs, all_touched=True, drop=True)
+    ds.isel(time=0, plev=0, member_id=0).ta.plot(robust=True);
+    plt.show()
+    # # Subset for testing purposes
+    # ds = ds.rio.clip_box(minx=0,maxx=60,miny=0,maxy=60)
     # Prepare vector
     grid = vectorize_raster(ds)
     factor = 2
