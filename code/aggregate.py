@@ -98,6 +98,14 @@ for name, ds in datasets_dict.items():
     ds = ds.sortby('y', ascending=False)
     # Prepare vector
     grid = vectorize_raster(ds)
+    factor = 2
+    y = ds.y.values
+    new_y = downsample(y, factor)
+    x = ds.x.values
+    new_x = downsample(x, factor)
+    x_step = np.mean(np.diff(x)) / factor
+    if x_step >= 1:
+        ds = ds.interp(y=new_y, x=new_x)
     # Split the grid where it crosses borders. Each cell is split into polygons, each belonging to 1 country
     intersections = grid.overlay(borders, how='intersection')
     # Calculate the population (sum/mean) in each such polygon
@@ -120,7 +128,7 @@ for name, ds in datasets_dict.items():
     # Aggregate
     ds = agg_on_model(ds, func='mean')
     ds = agg_on_space(ds, func='weighted_mean', weight=ds.population)
-    ds = agg_on_time(ds, func='mean')
+    ds = agg_on_year(ds, func='mean')
 
     # Export
     variables = '-'.join([x for x in list(ds.keys()) if x != 'population'])
@@ -128,14 +136,16 @@ for name, ds in datasets_dict.items():
     ds.to_dataframe().reset_index().to_parquet(context.projectpath() + f'/data/out/{name}.parq')
 
     # Visual sanity check
-    world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-    world.loc[world.name == 'France', 'iso_a3'] = 'FRA'
-    world.loc[world.name == 'Norway', 'iso_a3'] = 'NOR'
-    df = ds.isel(year=-1).to_dataframe().reset_index()
-    gdf = world.merge(df, left_on='iso_a3', right_on='iso3')
-    v = query['variable_id'][0]
-    import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(constrained_layout=True, dpi=200, figsize=(20, 20))
-    gdf.plot(column=v, legend=True)
-    ax.set_title(v)
-    plt.show()
+    do = False
+    if do:
+        world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+        world.loc[world.name == 'France', 'iso_a3'] = 'FRA'
+        world.loc[world.name == 'Norway', 'iso_a3'] = 'NOR'
+        df = ds.isel(year=-1).to_dataframe().reset_index()
+        gdf = world.merge(df, left_on='iso_a3', right_on='iso3')
+        v = query['variable_id'][0]
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(constrained_layout=True, dpi=200, figsize=(20, 20))
+        gdf.plot(column=v, legend=True)
+        ax.set_title(v)
+        plt.show()

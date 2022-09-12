@@ -110,7 +110,7 @@ def _simple_agg(ds, agg_var, func=None, **kwargs):
             )
 
 
-def agg_on_time(ds, func=None, **kwargs):
+def agg_on_year(ds, func=None, **kwargs):
     return _simple_agg(ds.groupby('time.year'), agg_var='time', func=func, **kwargs)
 
 
@@ -131,7 +131,7 @@ def aggregate(order='MST', *args, **kwargs):
     import itertools
     if not tuple('MST') in list(itertools.permutations(['M','S', 'T'])):
         raise ValueError('Wrong order')
-    d = {'M': agg_on_model, 'S': agg_on_space, 'T': agg_on_time}
+    d = {'M': agg_on_model, 'S': agg_on_space, 'T': agg_on_year}
     for agg_order in list(order):
         return d[agg_order](*args, **kwargs)
 
@@ -155,3 +155,13 @@ def weighted_gini(x, w=None):
     cumxw = np.cumsum(sorted_x * sorted_w, dtype=float)
     return (np.sum(cumxw[1:] * cumw[:-1] - cumxw[:-1] * cumw[1:]) /
             (cumxw[-1] * cumw[-1]))
+
+def downsample(arr, factor):
+    l = np.array([])
+    for i, n in enumerate(arr):
+        if i + 1 < len(arr):
+            start, stop = n, arr[i + 1]
+            l = np.concatenate([l, np.linspace(start, stop, factor + 1, endpoint=False)])
+        else:
+            l = np.append(l, n)
+    return l
