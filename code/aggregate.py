@@ -2,16 +2,20 @@
 from pathlib import Path
 from typing import Union
 
-import dask
 import geopandas as gpd
 import intake
+import numpy as np
+import pandas as pd
 import rioxarray as rioxr
+import statsmodels.formula.api as smf
+import xarray as xr
+from dask.diagnostics import ProgressBar
 from rasterstats import zonal_stats
 from shapely.geometry import Polygon
 from tqdm import tqdm
 
 import context
-from functions import *
+from functions import agg_on_model, agg_on_year, agg_on_space
 
 context.pdsettings()
 
@@ -25,7 +29,7 @@ def vectorize_raster(ds: xr.Dataset) -> gpd.GeoDataFrame:
     h = np.diff(ds[_lat].values)[0] / 2
     w = np.diff(ds[_lon].values)[0] / 2
     # Make a vector from the CMIP6 raster
-    df = ds[['lat', 'lon']].to_dataframe().reset_index()
+    df = ds[['y', 'x']].to_dataframe().reset_index()
     polygons = []
     for i, row in tqdm(df.iterrows(), total=len(df)):
         lat = row[_lat]
@@ -57,61 +61,83 @@ CMIP6_simulations_paths = list(Path(context.projectpath() + '/data/in/cmip6/').r
 # %% WB borders
 borders = gpd.read_file(
     context.projectpath() + '/data/in/borders/ne_10m_admin_0_countries_lakes/ne_10m_admin_0_countries_lakes.shp')
+borders.loc[borders.ADMIN == 'France', 'ISO_A3'] = 'FRA'
+borders.loc[borders.ADMIN == 'Norway', 'ISO_A3'] = 'NOR'
 borders = borders[['ISO_A3', 'geometry']]
 borders.rename(columns={'ISO_A3': 'iso3'}, inplace=True)
-borders = borders[borders.iso3!='-99']
+borders = borders[borders.iso3 != '-99']
 assert borders.iso3.nunique() == len(borders)
 # %% Prepare population raster
 path = context.projectpath() + r"/data/in/population/gpw-v4-population-count-rev11_2000_2pt5_min_tif/gpw_v4_population_count_rev11_2000_2pt5_min.tif"
 population = prepare_pop(path)
 
 # %% For each file, extract the grid (could vary across CMIP6 files), compute and attach population weights to it.
-pass
+
 # %% Download from Pangeo
 url = "https://storage.googleapis.com/cmip6/pangeo-cmip6.json"
 col = intake.open_esm_datastore(url)
 
-# # Get models from CSV. One model at the time
+# # # Get models from CSV. One model at the time
 # df = pd.read_csv('https://storage.googleapis.com/cmip6/pangeo-cmip6.csv')
 # for i, row in df[df.activity_id=='CMIP'].iterrows():
 #     row = row.drop(['dcpp_init_year'])
 #     cat = col.search(**row)
 
+path = context.projectpath() + '/data/in/pangeo-cmip6.csv'
+if Path(path).is_file():
+    df = pd.read_csv(path)
+else:
+    df = pd.read_csv('https://storage.googleapis.com/cmip6/pangeo-cmip6.csv')
+    df.to_csv(path)
+
+df = df[df.activity_id == 'CMIP']
+source_ids = df.source_id.unique()
+
 # load multiple models at once
-query = dict(experiment_id=['historical'],
-             table_id='Amon',
-             source_id=['CMCC-CM2-HR4'],
-             variable_id=['ta'],
-             grid_label=['gn'])
+query = dict(activity_id=['CMIP'],
+             experiment_id=['historical'],
+             table_id=['Amon'],
+             source_id=source_ids,  # ['CMCC-CM2-HR4'],
+             variable_id=['tas'],
+             grid_label=['gn'],
+             member_id=['r1i1p1f1']
+             )
+# possible values of table_id with description  https://clipc-services.ceda.ac.uk/dreq/index/miptable.html
+# possible values of variable_id with description https://clipc-services.ceda.ac.uk/dreq/index/var.html
 cat = col.search(**query)
-with dask.config.set(**{'array.slicing.split_large_chunks': True}):
-    datasets_dict = cat.to_dataset_dict(zarr_kwargs={'consolidated': True, 'decode_times': True})
+from xmip.preprocessing import combined_preprocessing
 
-for name, ds in datasets_dict.items():
-    # Aggregate CMIP6 data using a function of choice over time and space
+datasets_dict = cat.to_dataset_dict(
+    zarr_kwargs={'consolidated': True, 'decode_times': True})  # , preprocess=combined_preprocessing)
 
-    ds = combined_preprocessing(ds)
+# paths = list(Path(context.projectpath() + f'/data/in/cmip6/').rglob('*.nc'))
+# for path in paths:
+#     print(path.stem)
+#     ds = xr.open_dataset(path)
+for name, ds in tqdm(datasets_dict.items()):
+    folder = context.projectpath() + f'/data/out/cmip/{name}'
+    Path(folder).mkdir(parents=True, exist_ok=True)
+
+    try:
+        ds = combined_preprocessing(ds)
+    except:
+        continue
+    # deal with pressure levels
+    if 'plev' in ds.coords:
+        ds = ds.sel(plev=ds.plev.max())
+    ds = ds.reset_coords(drop=True)  # clean up
+    # ds = ds.sel(time=slice('1960-01-01', '2019-12-01'))
     # Fix longitude from (0,360) to (-180,180). Has to be before clipping
-    ds['x'] = ds.x.where(ds.x <= 180, ds.x - 360)
+    ds = ds.assign_coords({"x": (((ds.x + 180) % 360) - 180)})
     ds = ds.sortby('x')
     ds = ds.sortby('y', ascending=False)
     # Clip to borders of countries [saves memory]
     ds = ds.rio.write_crs('EPSG:4326')
     ds = ds.rio.clip(borders.geometry.values, borders.crs, all_touched=True, drop=True)
-    ds.isel(time=0, plev=0, member_id=0).ta.plot(robust=True);
-    plt.show()
     # # Subset for testing purposes
-    # ds = ds.rio.clip_box(minx=0,maxx=60,miny=0,maxy=60)
+    # ds = ds.rio.clip_box(minx=-10,maxx=20,miny=0,maxy=60)
     # Prepare vector
     grid = vectorize_raster(ds)
-    factor = 2
-    y = ds.y.values
-    new_y = downsample(y, factor)
-    x = ds.x.values
-    new_x = downsample(x, factor)
-    x_step = np.mean(np.diff(x)) / factor
-    if x_step >= 1:
-        ds = ds.interp(y=new_y, x=new_x)
     # Split the grid where it crosses borders. Each cell is split into polygons, each belonging to 1 country
     intersections = grid.overlay(borders, how='intersection')
     # Calculate the population (sum/mean) in each such polygon
@@ -129,29 +155,75 @@ for name, ds in datasets_dict.items():
     ds['population'] = ds['population'].fillna(0)
     # keep necessary coords, vars
     ds = ds[['x', 'y', 'time'] + list(ds.keys())]
-    if 'plev' in ds.coords:
-        ds = ds.isel(plev=0)
+    variables = [x for x in list(ds.keys()) if x in query['variable_id']]
+
     # Aggregate
     ds = agg_on_model(ds, func='mean')
+    # # Yearly mean
+    global_mean = ds.groupby("time.year").mean(dim=["time", 'x', 'y', 'iso3'])
+    global_mean = global_mean.compute()
+    global_mean = global_mean.to_dataframe()
+    for var in variables:
+        global_mean[var].reset_index().to_parquet(folder + f'/{var}_global_mean.parq')
     ds = agg_on_space(ds, func='weighted_mean', weight=ds.population)
     ds = agg_on_year(ds, func='mean')
 
     # Export
-    variables = '-'.join([x for x in list(ds.keys()) if x != 'population'])
-    name = '.'.join([name, variables])
-    ds.to_dataframe().reset_index().to_parquet(context.projectpath() + f'/data/out/{name}.parq')
+    ds = ds.drop('population')
+    ds = ds.reset_coords(drop=True)  # clean up
 
-    # Visual sanity check
-    do = False
-    if do:
-        world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-        world.loc[world.name == 'France', 'iso_a3'] = 'FRA'
-        world.loc[world.name == 'Norway', 'iso_a3'] = 'NOR'
-        df = ds.isel(year=-1).to_dataframe().reset_index()
-        gdf = world.merge(df, left_on='iso_a3', right_on='iso3')
-        v = query['variable_id'][0]
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(constrained_layout=True, dpi=200, figsize=(20, 20))
-        gdf.plot(column=v, legend=True)
-        ax.set_title(v)
-        plt.show()
+    # Exporting to dataframe is very..
+    with ProgressBar():
+        ds = ds.compute()
+    df = ds.to_dataframe()
+    for var in variables:
+        df[var].reset_index().to_parquet(folder + f'/{var}.parq')
+
+# %% Combine results
+# Surface air temperature
+files = list(Path(context.projectpath() + '/data/out/cmip').glob('*/tas.parq'))
+l = []
+for file in files:
+    _df = pd.read_parquet(file)
+    _df['model'] = file.parent.stem
+    l.append(_df)
+df = pd.concat(l)
+
+# Global mean of Surface air temperature
+files = list(Path(context.projectpath() + '/data/out/cmip').glob('*/tas_global_mean.parq'))
+l = []
+for file in files:
+    _df = pd.read_parquet(file)
+    _df['model'] = file.parent.stem
+    l.append(_df)
+global_mean = pd.concat(l)
+global_mean.rename(columns={'tas': 'avgtas'}, inplace=True)
+
+df = pd.merge(df, global_mean, on=['year', 'model'], how='outer')
+
+# Convert Kelvin to Celsius
+try:
+    df['tas'] += -273.15
+    df['avgtas'] += -273.15
+except KeyError:
+    pass
+# Export
+df.to_parquet(context.projectpath() + '/data/out/data.parq')
+df.to_csv(context.projectpath() + '/data/out/data.csv', index=False)
+
+# %% Estimate coefficients with OLS
+
+l = []
+for (iso3, model), g in tqdm(df.groupby(['iso3', 'model'])):
+    try:
+        res = smf.ols(formula='tas ~ avgtas', data=g).fit()
+    except ValueError:
+        continue
+    _ = pd.DataFrame({'iso3': [iso3], 'model': [model],
+                      'a': res.params['Intercept'], 'b': res.params['avgtas'],
+                      'a_se': res.HC3_se['Intercept'], 'b_se': res.HC3_se['avgtas'],
+                      })
+    l.append(_)
+coefs = pd.concat(l).reset_index(drop=True)
+coefs.to_parquet(context.projectpath() + '/data/out/coefficients.parq')
+coefs.to_csv(context.projectpath() + '/data/out/coefficients.csv', index=False)
