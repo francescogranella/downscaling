@@ -151,6 +151,14 @@ for name, ds in pbar:
     ds = ds.sortby('x')
     ds = ds.sortby('y', ascending=False)
     # Yearly mean: average over time and longitude; then average over latitude weighting by cell area
+    global_mean = ds.groupby("time.year").mean(dim=["time", 'x'])
+    area_weight = np.cos(np.deg2rad(ds.y))  # Rectangular grid: cosine of lat is proportional to grid cell area.
+    global_mean = global_mean.weighted(area_weight).mean(dim='y')
+    global_mean = global_mean.to_dataframe()
+    variables = [x for x in list(ds.keys()) if x in query['variable_id']]
+    for var in variables:
+        global_mean[var].reset_index().to_parquet(folder + f'/{var}_global_mean.parq')
+    del global_mean
     # Clip to borders of countries [saves memory]
     ds = ds.rio.write_crs('EPSG:4326')
     ds = ds.rio.clip(borders.geometry.values, borders.crs, all_touched=True, drop=True)
@@ -173,16 +181,8 @@ for name, ds in pbar:
     ds['population'] = ds['population'].fillna(0)
     # keep necessary coords, vars
     ds = ds[['x', 'y', 'time'] + list(ds.keys())]
-    variables = [x for x in list(ds.keys()) if x in query['variable_id']]
 
     # Aggregate
-    ds = agg_on_model(ds, func='mean')
-    # # Yearly mean
-    global_mean = ds.groupby("time.year").mean(dim=["time", 'x', 'y', 'iso3'])
-    global_mean = global_mean.compute()
-    global_mean = global_mean.to_dataframe()
-    for var in variables:
-        global_mean[var].reset_index().to_parquet(folder + f'/{var}_global_mean.parq')
     try:
         ds = agg_on_model(ds, func='mean')
     except ValueError:
