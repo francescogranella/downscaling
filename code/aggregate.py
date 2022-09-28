@@ -150,6 +150,7 @@ for name, ds in pbar:
     ds = ds.assign_coords({"x": (((ds.x + 180) % 360) - 180)})
     ds = ds.sortby('x')
     ds = ds.sortby('y', ascending=False)
+    # Yearly mean: average over time and longitude; then average over latitude weighting by cell area
     # Clip to borders of countries [saves memory]
     ds = ds.rio.write_crs('EPSG:4326')
     ds = ds.rio.clip(borders.geometry.values, borders.crs, all_touched=True, drop=True)
