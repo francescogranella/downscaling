@@ -108,6 +108,19 @@ def _simple_agg(ds, agg_var, func=None, **kwargs):
                 vectorize=True,
                 dask="parallelized"
             )
+    if func == 'count_above_threshold':
+        t = kwargs.get('threshold')
+
+
+
+        return xr.apply_ufunc(
+            _count_above_threshold,
+            ds,
+            t,
+            input_core_dims=[["time"]],
+            vectorize=True,
+            dask='parallelized'
+        )
 
 
 def agg_on_year(ds, func=None, **kwargs):
@@ -165,3 +178,7 @@ def downsample(arr, factor):
         else:
             l = np.append(l, n)
     return l
+
+
+def _count_above_threshold(x, t):
+    return np.sum(x >= t)
