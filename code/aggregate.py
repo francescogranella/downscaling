@@ -16,7 +16,7 @@ from tqdm import tqdm
 from xmip.preprocessing import combined_preprocessing
 
 import context
-from functions import agg_on_model, agg_on_year, agg_on_space
+from functions import agg_on_year, agg_on_space, vectorize_raster, prepare_pop, get_borders, get_udel
 
 context.pdsettings()
 
@@ -58,7 +58,7 @@ screened_models = _models.loc[_models['TCR Screen (likely) 1.4-2.2º'] == 'Y', '
 assert bool(set(screened_models) & set(source_ids))
 
 # load multiple models at once
-experiments = ['historical']  #, 'ssp585', 'ssp370', 'ssp245', 'ssp126']
+experiments = ['historical', 'ssp585', 'ssp370', 'ssp245', 'ssp126']
 query = dict(
     # activity_id=['CMIP'],
     experiment_id=experiments,
@@ -66,7 +66,7 @@ query = dict(
     source_id=screened_models,
     variable_id=['tas'],
     grid_label=['gn', 'gr', 'gr1'],
-    member_id=['r1i1p1f1']
+    # member_id=['r1i1p1f1']
 )
 # possible values of table_id with description  https://clipc-services.ceda.ac.uk/dreq/index/miptable.html
 # possible values of variable_id with description https://clipc-services.ceda.ac.uk/dreq/index/var.html
@@ -81,6 +81,14 @@ datasets_dict = cat.to_dataset_dict(
 #     ds = xr.open_dataset(path)
 
 # %% Process
+# datasets = []
+# for name, ds in datasets_dict.items():
+#     for member_id in ds.member_id:
+#         _ds = ds.sel(member_id=member_id).drop_vars('member_id')
+#         newname = '.'.join([name, str(member_id.values)])
+#         datasets.append((newname, _ds))
+
+datasets_dict = dict(sorted(datasets_dict.items()))
 pbar = tqdm(datasets_dict.items())
 for name, ds in pbar:
     pbar.set_description(name)
@@ -90,15 +98,20 @@ for name, ds in pbar:
         ds = combined_preprocessing(ds)
     except:
         continue
+    variables = [x for x in list(ds.keys()) if x in query['variable_id']]
+    if Path(folder + f'/tas.parq').is_file():
+        continue
+
     # deal with pressure levels
     if 'plev' in ds.coords:
         ds = ds.sel(plev=ds.plev.max())
-    # drop member_id if only one dimension
-    if len(list(ds.member_id)) == 1:
-        ds = ds.drop_vars('member_id')
+    # # drop member_id if only one dimension
+    # if len(list(ds.member_id)) == 1:
+    #     ds = ds.drop_vars('member_id')
 
     # # Subset for testing purposes
-    # ds = ds.sel(time=slice('2014-01-01', '2014-12-31'))
+    # # ds = ds.sel(time=slice('2014-01-01', '2014-12-31'))
+    # ds = ds.isel(time=slice(None,24))
     # ds = ds.rio.write_crs('EPSG:4326')
     # ds = ds.rio.clip_box(minx=0,maxx=20,miny=30,maxy=60)
     # ds = ds.reset_coords(drop=True)  # clean up
@@ -112,7 +125,6 @@ for name, ds in pbar:
     area_weight = np.cos(np.deg2rad(ds.y))  # Rectangular grid: cosine of lat is proportional to grid cell area.
     global_mean = global_mean.weighted(area_weight).mean(dim='y')
     global_mean = global_mean.to_dataframe()
-    variables = [x for x in list(ds.keys()) if x in query['variable_id']]
     for var in variables:
         global_mean[var].reset_index().to_parquet(folder + f'/{var}_global_mean.parq')
     del global_mean
@@ -140,11 +152,11 @@ for name, ds in pbar:
     ds = ds[['x', 'y', 'time'] + list(ds.keys())]
 
     # Aggregate
-    try:
-        ds = agg_on_model(ds, func='mean')
-    except ValueError:
-        # If member_id is unique and has been dropped
-        pass
+    # try:
+    #     ds = agg_on_model(ds, func='mean')
+    # except ValueError:
+    #     # If member_id is unique and has been dropped
+    #     pass
     ds = agg_on_space(ds, func='weighted_mean', weight=ds.population)
     ds = agg_on_year(ds, func='mean')
 
