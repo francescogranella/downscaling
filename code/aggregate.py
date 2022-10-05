@@ -202,15 +202,25 @@ try:
     df['avgtas'] += -273.15
 except KeyError:
     pass
+# remove avg GMT 1850-1899
+preind_avgtas = df[df.year.between(1850, 1899)].groupby(['model']).avgtas.mean().to_frame().rename({'avgtas': 'preind_avgtas'}, axis=1)
+df = pd.merge(df, preind_avgtas, left_on='model', right_index=True, how='outer')
+df.insert(6, 'davgtas', df.avgtas - df.preind_avgtas)
+
+# Debias matching historical country temperature to UDel temp for the same period
+# NB does not debias GMT and anomaly
+udel = get_udel()
+df = pd.merge(df, udel, on=['iso3', 'year'], how='left')
+bias = df[df.year.between(1980,2014)].groupby(['iso3', 'model'])[['tas', 'udeltas']].mean()
+bias = (bias.tas - bias.udeltas).reset_index().rename(columns={0:'bias'})
+df = pd.merge(df, bias, on=['iso3', 'model'], how='left')
+df['ubtas'] = df['tas'] - df['bias']
+
 # Export
 df.to_parquet(context.projectpath() + '/data/out/data.parq')
-df.to_csv(context.projectpath() + '/data/out/data.csv', index=False)
 
 # %% Estimate coefficients with OLS
 df = pd.read_parquet(context.projectpath() + '/data/out/data.parq')
-
-# remove avg GMT 1850-1899
-df['avgtas'] -= df[df.year.between(1850, 1899)].groupby(['model']).avgtas.mean().values
 
 # estimate
 l = []
