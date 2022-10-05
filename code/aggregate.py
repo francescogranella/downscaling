@@ -21,53 +21,10 @@ from functions import agg_on_model, agg_on_year, agg_on_space
 context.pdsettings()
 
 
-# %% Function: vectorize the CMIP6 raster
-def vectorize_raster(ds: xr.Dataset) -> gpd.GeoDataFrame:
-    # Remove time
-    ds = ds.copy().isel(time=0)
-    # (half) height and width of CMIP6 raster cells
-    _lon, _lat = 'x', 'y'
-    h = np.diff(ds[_lat].values)[0] / 2
-    w = np.diff(ds[_lon].values)[0] / 2
-    # Make a vector from the CMIP6 raster
-    df = ds[['y', 'x']].to_dataframe().reset_index()
-    polygons = []
-    for i, row in df.iterrows():
-        lat = row[_lat]
-        lon = row[_lon]
-        polygons.append(Polygon([(lon - w, lat - h), (lon + w, lat - h), (lon + w, lat + h), (lon - w, lat + h)]))
-    return gpd.GeoDataFrame(df[['x', 'y']], geometry=polygons, crs='EPSG:4326')
-
-
-# %% Function: prepare the population raster for zonal statistics
-def prepare_pop(path: Union[str, Path]) -> xr.DataArray:
-    population = rioxr.open_rasterio(path)
-    # Replace fill values
-    population = population.where(population >= 0)
-    # Confirm that longitude is in increasing order (W to E) and latitude is decreasing (N to S)
-    # because rasterstats assumes dataset’s pixel coordinate system has its origin at the “upper left”
-    population = population.sortby('x', ascending=True)
-    population = population.sortby('y', ascending=False)
-    band, x, y = population.indexes.values()
-    assert all(x[i] <= x[i + 1] for i in range(len(x) - 1))
-    assert all(y[i] >= y[i + 1] for i in range(len(y) - 1))
-    # Extract the DataArray from the Dataset
-    population = population.isel(band=0)
-    population = population.rio.write_transform()
-    return population
-
-
 # %% CMIP6 files
 CMIP6_simulations_paths = list(Path(context.projectpath() + '/data/in/cmip6/').rglob("*.nc"))
 # %% WB borders
-borders = gpd.read_file(
-    context.projectpath() + '/data/in/borders/ne_10m_admin_0_countries_lakes/ne_10m_admin_0_countries_lakes.shp')
-borders.loc[borders.ADMIN == 'France', 'ISO_A3'] = 'FRA'
-borders.loc[borders.ADMIN == 'Norway', 'ISO_A3'] = 'NOR'
-borders = borders[['ISO_A3', 'geometry']]
-borders.rename(columns={'ISO_A3': 'iso3'}, inplace=True)
-borders = borders[borders.iso3 != '-99']
-assert borders.iso3.nunique() == len(borders)
+borders = get_borders()
 # %% Prepare population raster
 path = context.projectpath() + r"/data/in/population/gpw-v4-population-count-rev11_2000_2pt5_min_tif/gpw_v4_population_count_rev11_2000_2pt5_min.tif"
 population = prepare_pop(path)
