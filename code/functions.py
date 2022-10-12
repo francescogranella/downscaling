@@ -6,6 +6,7 @@ import pandas as pd
 import rioxarray as rioxr
 from shapely.geometry import Polygon
 import xarray as xr
+import matplotlib.pyplot as plt
 
 import context
 
@@ -246,3 +247,57 @@ def get_udel():
     except:
         import udel
         return pd.read_parquet(udel_file_path)
+
+
+def get_hadcrut5():
+    import pandas as pd
+    url = 'https://crudata.uea.ac.uk/cru/data/temperature/HadCRUT5.0Analysis_gl.txt'
+    df = pd.read_table(url, header=None, sep='\s+')
+    df = df.iloc[(df.index % 2) == 0]
+    df = df[[0,13]]
+    df.columns = ['year', 'gmta']
+    return df
+
+
+def get_gmt(diagnostic_plots=False):
+    # MAGICC7
+    files = list(Path(context.projectpath() + '/data/in/magicc7').glob('SSP*'))
+    l = []
+    for file in files:
+       _df = pd.read_csv(file)
+       _df = _df[_df.variable=='Surface Temperature']
+       scenario = _df.scenario.iloc[0].lower()
+       idx = _df.columns.get_loc('1995')
+       _df = _df[_df.columns[idx:]].T
+       _df.columns = [scenario]
+       l.append(_df)
+    df = pd.concat(l, axis=1).reset_index().rename(columns={'index': 'year'})
+    df['year'] = df.year.astype(int)
+
+
+    # HadCRUT5
+    hadcrut5 = get_hadcrut5()
+    hadcrut5.rename(columns={'gmta':'historical'}, inplace=True)
+
+    # Plot
+    if diagnostic_plots:
+        pd.merge(df, hadcrut5, on='year', how='outer').set_index('year').plot()
+        plt.savefig(context.projectpath() + '/img/diagnostics/magicc7_hadcrut5_gap.png')
+        plt.show()
+
+    # Shift MAGICC7 GMT to match HadCRUT5 over 1995-2014
+    # MAGICC7 GMT anomaly is the same across SSP until 2014 (observed data)
+    # Mean 1995-2014
+    magicc7_reference = df[df.year.between(1995,2014)].set_index('year').mean().mean()
+    hadcrut5_reference = hadcrut5[hadcrut5.year.between(1995,2014)].historical.mean()
+    # Gap
+    gap = hadcrut5_reference - magicc7_reference
+    # Close the gap
+    df = df.set_index('year') + gap
+    # Plot
+    if diagnostic_plots:
+        pd.merge(df, hadcrut5, on='year', how='outer').set_index('year').plot()
+        plt.savefig(context.projectpath() + '/img/diagnostics/magicc7_hadcrut5_nogap.png')
+        plt.show()
+
+    return df

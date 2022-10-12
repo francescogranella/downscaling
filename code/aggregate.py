@@ -16,7 +16,7 @@ from tqdm import tqdm
 from xmip.preprocessing import combined_preprocessing
 
 import context
-from functions import agg_on_year, agg_on_space, vectorize_raster, prepare_pop, get_borders, get_udel
+from functions import agg_on_year, agg_on_space, vectorize_raster, prepare_pop, get_borders, get_udel, get_hadcrut5, get_gmt
 
 context.pdsettings()
 
@@ -184,30 +184,25 @@ for file in files:
     l.append(_df)
 df = pd.concat(l)
 
-# Global mean of Surface air temperature
-files = list(cmip_path.glob('*/tas_global_mean.parq'))
-l = []
-for file in files:
-    _df = pd.read_parquet(file)
-    _df['model'] = '.'.join([file.parent.stem.split('.')[i] for i in [1, 2, 4]])
-    _df['scenario'] = file.parent.stem.split('.')[3]
-    l.append(_df)
-global_mean = pd.concat(l)
-global_mean.rename(columns={'tas': 'avgtas'}, inplace=True)
-
-df = pd.merge(df, global_mean, on=['year', 'model', 'scenario'], how='outer')
+# # Global mean of Surface air temperature
+# files = list(cmip_path.glob('*/tas_global_mean.parq'))
+# l = []
+# for file in files:
+#     _df = pd.read_parquet(file)
+#     _df['model'] = '.'.join([file.parent.stem.split('.')[i] for i in [1, 2, 4]])
+#     _df['scenario'] = file.parent.stem.split('.')[3]
+#     l.append(_df)
+# global_mean = pd.concat(l)
+# global_mean.rename(columns={'tas': 'avgtas'}, inplace=True)
+#
+# df = pd.merge(df, global_mean, on=['year', 'model', 'scenario', 'member_id'], how='left')
 
 # Convert Kelvin to Celsius
 try:
     df['tas'] += -273.15
-    df['avgtas'] += -273.15
+    # df['avgtas'] += -273.15
 except KeyError:
     pass
-# remove avg GMT 1850-1899
-preind_avgtas = df[df.year.between(1850, 1899)].groupby(['model']).avgtas.mean().to_frame().rename({'avgtas': 'preind_avgtas'}, axis=1)
-df = pd.merge(df, preind_avgtas, left_on='model', right_index=True, how='outer')
-df.insert(6, 'davgtas', df.avgtas - df.preind_avgtas)
-
 # Debias matching historical country temperature to UDel temp for the same period
 # NB does not debias GMT and anomaly
 udel = get_udel()
@@ -216,6 +211,12 @@ bias = df[df.year.between(1980,2014)].groupby(['iso3', 'model'])[['tas', 'udelta
 bias = (bias.tas - bias.udeltas).reset_index().rename(columns={0:'bias'})
 df = pd.merge(df, bias, on=['iso3', 'model'], how='left')
 df['ubtas'] = df['tas'] - df['bias']
+
+gmt = get_gmt()
+gmt.unstack().reset_index()
+gmt = gmt.reset_index().melt(id_vars='year', var_name='scenario', value_name='gmt')
+
+df = pd.merge(df, gmt, on=['year', 'scenario'], how='left')
 
 # Export
 df.to_parquet(context.projectpath() + '/data/out/data.parq')
