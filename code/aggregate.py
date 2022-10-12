@@ -20,6 +20,8 @@ from functions import agg_on_year, agg_on_space, vectorize_raster, prepare_pop, 
 
 context.pdsettings()
 
+import warnings
+warnings.filterwarnings("ignore")
 
 # %% CMIP6 files
 CMIP6_simulations_paths = list(Path(context.projectpath() + '/data/in/cmip6/').rglob("*.nc"))
@@ -73,13 +75,11 @@ query = dict(
 # possible values of variable_id with description https://clipc-services.ceda.ac.uk/dreq/index/var.html
 cat = col.search(**query)
 
-datasets_dict = cat.to_dataset_dict(
-    zarr_kwargs={'consolidated': True, 'decode_times': True})  # , preprocess=combined_preprocessing)
-
-# paths = list(Path(context.projectpath() + f'/data/in/cmip6/').rglob('*.nc'))
-# for path in paths:
-#     print(path.stem)
-#     ds = xr.open_dataset(path)
+# datasets_dict = cat.to_dataset_dict(
+#     zarr_kwargs={'consolidated': True, 'decode_times': True})  # , preprocess=combined_preprocessing)
+import dask
+with dask.config.set(**{'array.slicing.split_large_chunks': False}):
+    datasets_dict = cat.to_dataset_dict(zarr_kwargs={'consolidated': True, 'decode_times': True})
 
 # %% Process
 # datasets = []
@@ -248,4 +248,84 @@ for (iso3, model), g in tqdm(df.groupby(['iso3', 'model'])):
     l.append(_)
 coefs = pd.concat(l).reset_index(drop=True)
 coefs.to_parquet(context.projectpath() + '/data/out/coefficients.parq')
-coefs.to_csv(context.projectpath() + '/data/out/coefficients.csv', index=False)
+
+# %% Plot temperature
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import palettable
+mpl.rcParams['axes.prop_cycle'] = mpl.cycler(color=palettable.wesanderson.Zissou_5.mpl_colors)
+
+df = pd.read_parquet(context.projectpath() + '/data/out/data.parq')
+
+with plt.style.context('fivethirtyeight'):
+    df[df.iso3 == 'ITA'].set_index('year').groupby('model').tas.plot(alpha=.25);
+    # plt.legend();
+    plt.show()
+
+from statsmodels.nonparametric.smoothers_lowess import lowess
+gs = df[df.iso3 == 'USA'].groupby(['iso3', 'model'])
+fig, axs = plt.subplots(6,6, figsize=(20,7), sharex=True)
+for i, ((iso, model), g) in enumerate(gs):
+    ax = axs.flatten()[i]
+    ax.set_prop_cycle('color', palettable.wesanderson.Zissou_5.mpl_colors)
+    g = g[g.year.between(1900,2100)].set_index('year')
+    for scen, _g in g.groupby('scenario'):
+        _g.ubtas.plot(ax=ax, alpha=0.5)
+    ax.plot([1980, 2014], [g.udeltas.mean(), g.udeltas.mean()], color='red')
+    _g = g.groupby('year').ubtas.mean()
+    _ = lowess(_g, _g.index)
+    ax.plot(_[:,0], _[:,1], color='black', linestyle='dashed')
+    ax.set_ylabel(model, fontsize=7)
+    ax.spines[['top', 'bottom', 'right']].set_visible(False)
+    # g[g.year.between(1980,2035)].set_index('year').groupby(['scenario', 'model']).tas.rolling(5).mean().plot(ax=ax)
+for ax in axs.flatten()[-5:]:
+    fig.delaxes(ax)
+plt.suptitle('USA')
+plt.tight_layout()
+plt.show()
+
+import seaborn as sns
+df = df[(df.iso3=='ITA') & (df.model=='CMCC.CMCC-CM2-SR5.Amon')]
+sns.lmplot(data=df, x='year', y='tas', hue='member_id')
+plt.show()
+
+colors = palettable.wesanderson.Zissou_5.mpl_colors
+scenarios = df.scenario.unique()
+scenarios.sort()
+scenario_color = dict(zip(scenarios, colors))
+gs = df[df.iso3 == 'USA'].groupby(['iso3', 'model'])
+fig, axs = plt.subplots(6,6, figsize=(30,14), dpi=200, sharex=True, sharey=True)
+for i, ((iso3, model), g1) in enumerate(gs):
+    ax = axs.flatten()[i]
+    g1s = g1.groupby(['scenario', 'member_id'])
+    for (scenario, member_id), g2 in g1s:
+        c = scenario_color[scenario]
+        ax.plot(g2.year, g2.ubtas, c=c, alpha=0.35)
+    _g = g1.groupby('year').ubtas.mean()
+    _ = lowess(_g, _g.index)
+    ax.plot(_[:, 0], _[:, 1], color='black', linestyle='dashed')
+    ax.plot([1980, 2014], [g1.udeltas.mean(), g1.udeltas.mean()], color='red', zorder=2)
+    ax.text(0.03, 0.97, model, fontsize=5, ha='left', va='top', transform=ax.transAxes)
+# for ax in axs.flatten():
+#     ax.spines[['top', 'right']].set_visible(False)
+fig.subplots_adjust(hspace=0, wspace=0)
+plt.tight_layout()
+plt.show()
+
+df = df[(df.iso3 == 'USA') & (df.model=='CNRM-CERFACS.CNRM-ESM2-1.Amon')]
+fig, axs = plt.subplots(1,2, sharey=True, sharex=True)
+gs = df.groupby(['scenario', 'member_id'])
+for (scenario, member_id), g in gs:
+    c = scenario_color[scenario]
+    axs[0].plot(g.year, g.tas, c=c, alpha=0.35, label=None)
+    axs[1].plot(g.year, g.ubtas, c=c, alpha=0.35, label=None)
+for ax in axs:
+    ax.plot([1980, 2014], [df.udeltas.mean(), df.udeltas.mean()], color='red', zorder=2)
+    ax.spines[['top', 'right']].set_visible(False)
+axs[0].set_title('Original')
+axs[1].set_title('Shifted')
+plt.suptitle('CNRM-CERFACS.CNRM-ESM2-1.Amon, USA')
+plt.tight_layout()
+plt.savefig(context.projectpath() + '/img/diagnostics/example.png')
+plt.show()
+
