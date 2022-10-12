@@ -1,6 +1,7 @@
 #### Project
 !.gitkeep
 
+.sublime*
 code/sandbox.py
 
 data/in/*
