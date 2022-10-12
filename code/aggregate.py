@@ -227,18 +227,25 @@ df = pd.read_parquet(context.projectpath() + '/data/out/data.parq')
 # estimate
 l = []
 for (iso3, model), g in tqdm(df.groupby(['iso3', 'model'])):
-    for ssp in [x for x in df.scenario.unique() if 'ssp' in x]:
-        dat = g[g.scenario.isin(['historical', ssp])]
-        try:
-            res = smf.ols(formula='tas ~ avgtas', data=dat).fit()
-        except ValueError:
-            continue
-        _ = pd.DataFrame({'iso3': [iso3], 'model': [model], 'scenario': ['historical_' + ssp],
-                          'a': res.params['Intercept'], 'b': res.params['avgtas'],
-                          'a_se': res.HC3_se['Intercept'], 'b_se': res.HC3_se['avgtas'],
-                          'r2': res.rsquared
-                          })
-        l.append(_)
+    # for ssp in [x for x in df.scenario.unique() if 'ssp' in x]:
+    #     dat = g[g.scenario.isin(['historical', ssp])]
+    try:
+        res = smf.ols(formula='ubtas ~ gmt', data=g).fit()
+    except ValueError:
+        continue
+    pass
+    _ = pd.read_html(res.summary().tables[1].as_html(), header=0, index_col=0)[0][['coef', 'std err']].stack()
+    _ = _.to_frame().T
+    _.columns = ['_'.join(x) for x in _.columns]
+    _.insert(0, 'iso3', [iso3])
+    _.insert(1, 'model', [model])
+    _.insert(2, 'r2', [res.rsquared])
+    # _ = pd.DataFrame({'iso3': [iso3], 'model': [model], # 'scenario': ['historical_' + ssp],
+    #                   'a': res.params['Intercept'], 'b': res.params['davgtas'],
+    #                   'a_se': res.HC3_se['Intercept'], 'b_se': res.HC3_se['avgtas'],
+    #                   'r2': res.rsquared
+    #                   })
+    l.append(_)
 coefs = pd.concat(l).reset_index(drop=True)
 coefs.to_parquet(context.projectpath() + '/data/out/coefficients.parq')
 coefs.to_csv(context.projectpath() + '/data/out/coefficients.csv', index=False)
