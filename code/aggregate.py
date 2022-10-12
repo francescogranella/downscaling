@@ -57,6 +57,7 @@ screened_models = _models.loc[_models['TCR Screen (likely) 1.4-2.2º'] == 'Y', '
 # Assert all screened models are in Pangeo
 assert bool(set(screened_models) & set(source_ids))
 
+screened_models = [x for x in screened_models if x!='ACCESS-CM2']
 # load multiple models at once
 experiments = ['historical', 'ssp585', 'ssp370', 'ssp245', 'ssp126']
 query = dict(
