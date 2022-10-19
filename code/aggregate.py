@@ -230,7 +230,8 @@ for (iso3, model), g in tqdm(df.groupby(['iso3', 'model'])):
     # for ssp in [x for x in df.scenario.unique() if 'ssp' in x]:
     #     dat = g[g.scenario.isin(['historical', ssp])]
     try:
-        res = smf.ols(formula='ubtas ~ gmt', data=g).fit()
+        g['gmt2'] = g.gmt**2
+        res = smf.ols(formula='ubtas ~ gmt + gmt2', data=g).fit()
     except ValueError:
         continue
     pass
