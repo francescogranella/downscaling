@@ -5,7 +5,7 @@
 + Limit analysis to the scenarios: historical, SSP126, SSP245, SSP370, SSP585.
 + Monthly data. Daily data would take too long to process
 + `tas`: Near-Surface Air Temperature [K]
-+ Members (runs?) of ensembles are not averaged to maintain within-model variability
++ Members (that is, runs) of ensembles are not averaged to maintain within-model variability
 
 CMIP6 data for such models from [Pangeo](https://gallery.pangeo.io/repos/pangeo-gallery/cmip6/intake_ESM_example.html) and clean with the [XMIP python package](https://cmip6-preprocessing.readthedocs.io/en/latest/tutorial.html).
 
@@ -15,13 +15,13 @@ Cells of CMIP6 data are split where crossed by a country border. Then, for each 
 
 ## Aggregation
 
-Temperature data is aggregate over space then time with customizable functions. As of know, temperature is averaged over space weighting for population; and by year (same weight given to all months).
+Temperature data is aggregated over space then time with customizable functions. As of now, temperature is averaged over space weighting for population; and by year (same weight given to all months).
 
 ## Pre-processing
 
 The goal is to estimate, separately for each country $i$ and model $m$
 
-$T_{t} = \alpha + \beta GMTanomaly_t + \epsilon_t \quad \forall i,m$. (1)
+$T_{t} = \alpha + \beta_1 GMTanomaly_t + \beta_2 GMTanomaly^2_t + \epsilon_t \quad \forall i,m$. (1)
 
 I estimate (1) on data pooling together different model runs (if $m$ is an ensemble) and scenarios.
 
@@ -61,12 +61,12 @@ The main script is `aggregate.py`. It calls functions in `functions.py` and `con
 
 # TODO
 + [x] Get HadCRUT5, MAGICC7. Harmonize GMT. Merge with main dataframe.
-+ [ ] Use HadCRUT5+MAGICC7 GMT for regressions.
++ [x] Use HadCRUT5+MAGICC7 GMT for regressions.
 + [x] ABW (and what else?) has no UDel-derived temp. <-- Because  not covered by UDel grid
 + [x] Aggregate UDel to ISO3
 + [ ] Use population projections
-+ [ ] Fix regression to use UDel-adjusted temperature
-+ [ ] Fix regression to include different members of ensemble
++ [x] Fix regression to use UDel-adjusted temperature
++ [x] Fix regression to include different members of ensemble
 + [ ] Use exactextract
 + [ ] NUTS2 / Subnational regions
 + [x] Deal with other dimensions: plev
