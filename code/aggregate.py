@@ -218,8 +218,11 @@ gmt = gmt.reset_index().melt(id_vars='year', var_name='scenario', value_name='gm
 
 df = pd.merge(df, gmt, on=['year', 'scenario'], how='left')
 
+for c in ['iso3', 'member_id', 'model', 'scenario']:
+    df[c] = df[c].astype('category')
+
 # Export
-df.to_parquet(context.projectpath() + '/data/out/data.parq')
+df.round(2).to_parquet(context.projectpath() + '/data/out/data.parq')
 
 # %% Estimate coefficients with OLS
 df = pd.read_parquet(context.projectpath() + '/data/out/data.parq')
