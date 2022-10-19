@@ -260,6 +260,7 @@ import palettable
 mpl.rcParams['axes.prop_cycle'] = mpl.cycler(color=palettable.wesanderson.Zissou_5.mpl_colors)
 
 df = pd.read_parquet(context.projectpath() + '/data/out/data.parq')
+df = df[df.year<=2100]
 
 with plt.style.context('fivethirtyeight'):
     df[df.iso3 == 'ITA'].set_index('year').groupby('model').tas.plot(alpha=.25);
@@ -295,7 +296,7 @@ plt.show()
 
 colors = palettable.wesanderson.Zissou_5.mpl_colors
 scenarios = df.scenario.unique()
-scenarios.sort()
+scenarios = scenarios.categories.sort_values()
 scenario_color = dict(zip(scenarios, colors))
 gs = df[df.iso3 == 'USA'].groupby(['iso3', 'model'])
 fig, axs = plt.subplots(6,6, figsize=(30,14), dpi=200, sharex=True, sharey=True)
@@ -314,6 +315,7 @@ for i, ((iso3, model), g1) in enumerate(gs):
 #     ax.spines[['top', 'right']].set_visible(False)
 fig.subplots_adjust(hspace=0, wspace=0)
 plt.tight_layout()
+plt.savefig(context.projectpath() + '/img/diagnostics/USA_models.png')
 plt.show()
 
 df = df[(df.iso3 == 'USA') & (df.model=='CNRM-CERFACS.CNRM-ESM2-1.Amon')]
@@ -332,4 +334,3 @@ plt.suptitle('CNRM-CERFACS.CNRM-ESM2-1.Amon, USA')
 plt.tight_layout()
 plt.savefig(context.projectpath() + '/img/diagnostics/example.png')
 plt.show()
-
