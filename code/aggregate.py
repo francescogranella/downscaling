@@ -157,7 +157,11 @@ for name, ds in pbar:
     # except ValueError:
     #     # If member_id is unique and has been dropped
     #     pass
-    ds = agg_on_space(ds, func='weighted_mean', weight=ds.population)
+    _ds_weighted = agg_on_space(ds, func='weighted_mean', weight=ds.population)
+    _ds_unweighted = agg_on_space(ds, func='mean', weight=None)
+    _ds_unweighted = _ds_unweighted[variables]
+    _ds_unweighted = _ds_unweighted.rename({x: x + '_unweighted' for x in variables})
+    ds = xr.combine_by_coords([_ds_weighted, _ds_unweighted])
     ds = agg_on_year(ds, func='mean')
 
     # Export
@@ -169,7 +173,7 @@ for name, ds in pbar:
         ds = ds.compute()
     df = ds.to_dataframe()
     for var in variables:
-        df[var].reset_index().to_parquet(folder + f'/{var}.parq')
+        df[[var, var + '_unweighted']].reset_index().to_parquet(folder + f'/{var}.parq')
 
 # %% Combine results
 cmip_path = Path(context.projectpath() + '/data/out/cmip')
