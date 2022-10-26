@@ -111,7 +111,6 @@ for name, ds in pbar:
     #     ds = ds.drop_vars('member_id')
 
     # # Subset for testing purposes
-    # # ds = ds.sel(time=slice('2014-01-01', '2014-12-31'))
     # ds = ds.isel(time=slice(None,24))
     # ds = ds.rio.write_crs('EPSG:4326')
     # ds = ds.rio.clip_box(minx=0,maxx=20,miny=30,maxy=60)
@@ -121,14 +120,14 @@ for name, ds in pbar:
     ds = ds.assign_coords({"x": (((ds.x + 180) % 360) - 180)})
     ds = ds.sortby('x')
     ds = ds.sortby('y', ascending=False)
-    # Yearly mean: average over time and longitude; then average over latitude weighting by cell area
-    global_mean = ds.groupby("time.year").mean(dim=["time", 'x'])
-    area_weight = np.cos(np.deg2rad(ds.y))  # Rectangular grid: cosine of lat is proportional to grid cell area.
-    global_mean = global_mean.weighted(area_weight).mean(dim='y')
-    global_mean = global_mean.to_dataframe()
-    for var in variables:
-        global_mean[var].reset_index().to_parquet(folder + f'/{var}_global_mean.parq')
-    del global_mean
+    # # Yearly mean: average over time and longitude; then average over latitude weighting by cell area
+    # global_mean = ds.groupby("time.year").mean(dim=["time", 'x'])
+    # area_weight = np.cos(np.deg2rad(ds.y))  # Rectangular grid: cosine of lat is proportional to grid cell area.
+    # global_mean = global_mean.weighted(area_weight).mean(dim='y')
+    # global_mean = global_mean.to_dataframe()
+    # for var in variables:
+    #     global_mean[var].reset_index().to_parquet(folder + f'/{var}_global_mean.parq')
+    # del global_mean
     # Clip to borders of countries [saves memory]
     ds = ds.rio.write_crs('EPSG:4326')
     ds = ds.rio.clip(borders.geometry.values, borders.crs, all_touched=True, drop=True)
