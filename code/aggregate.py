@@ -131,19 +131,26 @@ for name, ds in pbar:
     # Clip to borders of countries [saves memory]
     ds = ds.rio.write_crs('EPSG:4326')
     ds = ds.rio.clip(borders.geometry.values, borders.crs, all_touched=True, drop=True)
-    # Prepare vector
-    grid = vectorize_raster(ds)
-    # Split the grid where it crosses borders. Each cell is split into polygons, each belonging to 1 country
-    intersections = grid.overlay(borders, how='intersection')
-    # Calculate the population (sum/mean) in each such polygon
-    stat = 'sum'
-    zs = zonal_stats(vectors=intersections['geometry'], raster=population.values, affine=population.rio.transform(),
-                     stats=stat,
-                     nodata=np.nan, all_touched=False)
-    intersections = pd.concat([intersections, pd.DataFrame(zs)], axis=1)
-    intersections.rename(columns={stat: 'population'}, inplace=True)
-    # to xarray
-    ds_w = intersections.drop('geometry', axis=1).set_index(['y', 'x', 'iso3']).to_xarray()
+    # Population weights are created once for every model(x temporal resolution) because all scenarios from a model have the same grid
+    modelname = '.'.join([name.split('.')[i] for i in [1, 2, 4]])
+    popweights_file = Path(context.projectpath() + f'/data/out/popweights/{modelname}.nc')
+    if popweights_file.exists():
+        ds_w = xr.open_dataset(popweights_file)
+    else:
+        # Prepare vector
+        grid = vectorize_raster(ds)
+        # Split the grid where it crosses borders. Each cell is split into polygons, each belonging to 1 country
+        intersections = grid.overlay(borders, how='intersection')
+        # Calculate the population (sum/mean) in each such polygon
+        stat = 'sum'
+        zs = zonal_stats(vectors=intersections['geometry'], raster=population.values, affine=population.rio.transform(),
+                         stats=stat,
+                         nodata=np.nan, all_touched=False)
+        intersections = pd.concat([intersections, pd.DataFrame(zs)], axis=1)
+        intersections.rename(columns={stat: 'population'}, inplace=True)
+        # to xarray
+        ds_w = intersections.drop('geometry', axis=1).set_index(['y', 'x', 'iso3']).to_xarray()
+        ds_w.to_netcdf(popweights_file)
     # merge: add population to ds
     ds = xr.combine_by_coords([ds, ds_w])
     # assign 0 weight to (x,y,iso3) cells for which (x,y) do not fall into country iso3
@@ -233,8 +240,24 @@ df = pd.read_parquet(context.projectpath() + '/data/out/data.parq')
 # estimate
 l = []
 for (iso3, model), g in tqdm(df.groupby(['iso3', 'model'])):
-    # for ssp in [x for x in df.scenario.unique() if 'ssp' in x]:
-    #     dat = g[g.scenario.isin(['historical', ssp])]
+    try:
+        g['gmt2'] = g.gmt**2
+        res = smf.ols(formula='ubtas ~ gmt', data=g).fit()
+    except ValueError:
+        continue
+    pass
+    _ = pd.read_html(res.summary().tables[1].as_html(), header=0, index_col=0)[0][['coef', 'std err']].stack()
+    _ = _.to_frame().T
+    _.columns = ['_'.join(x) for x in _.columns]
+    _.insert(0, 'iso3', [iso3])
+    _.insert(1, 'model', [model])
+    _.insert(2, 'r2', [res.rsquared])
+    l.append(_)
+coefs = pd.concat(l).reset_index(drop=True)
+coefs.to_parquet(context.projectpath() + '/data/out/coefficients.parq')
+# quadratic
+l = []
+for (iso3, model), g in tqdm(df.groupby(['iso3', 'model'])):
     try:
         g['gmt2'] = g.gmt**2
         res = smf.ols(formula='ubtas ~ gmt + gmt2', data=g).fit()
@@ -247,14 +270,16 @@ for (iso3, model), g in tqdm(df.groupby(['iso3', 'model'])):
     _.insert(0, 'iso3', [iso3])
     _.insert(1, 'model', [model])
     _.insert(2, 'r2', [res.rsquared])
-    # _ = pd.DataFrame({'iso3': [iso3], 'model': [model], # 'scenario': ['historical_' + ssp],
-    #                   'a': res.params['Intercept'], 'b': res.params['davgtas'],
-    #                   'a_se': res.HC3_se['Intercept'], 'b_se': res.HC3_se['avgtas'],
-    #                   'r2': res.rsquared
-    #                   })
     l.append(_)
 coefs = pd.concat(l).reset_index(drop=True)
-coefs.to_parquet(context.projectpath() + '/data/out/coefficients.parq')
+coefs.to_parquet(context.projectpath() + '/data/out/coefficients_2.parq')
+
+missing = set(df.model.unique()) - set(coefs.model.unique())
+asd = df[df.model.isin(list(missing))]
+asd['model'] = asd.model.astype('str')
+asd['scenario'] = asd.scenario.astype('str')
+asd = asd.groupby(['model', 'scenario']).count().reset_index()
+pd.crosstab(asd.model, asd.scenario)
 
 # %% Plot temperature
 import matplotlib.pyplot as plt
