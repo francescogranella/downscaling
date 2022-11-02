@@ -1,7 +1,6 @@
 # Notes
 
-+ Select non-hot models following [Hausfather et al. (2022)](https://www.nature.com/articles/d41586-022-01192-2): take the models whose TCR Screen (likely) in 1.4-2.2º range. Hausfather et al. (2022) select 34 models. At present, I *exclude ACCESS-CM2* because the Pangeo file has incosistent datetime values giving problems (To do.will be fixed in the future). Coefficients for downscaling cannot be calculated for 5 additional models (DKRZ.MPI-ESM1-2-HR.Amon, DWD.MPI-ESM1-2-HR.Amon, MPI-M.MPI-ESM1-2-HR.Amon, NCAR.CESM2-FV2.Amon, NCAR.CESM2-WACCM-FV2.Amon) because they do not have historical data (and cannot be debiased), or do not have SSPs altogether and fail the main need. **This is odd, since Hausfather et al use 34 models - it could be an issue with Pangeo data Todo**
-+ 
++ Select non-hot models following [Hausfather et al. (2022)](https://www.nature.com/articles/d41586-022-01192-2): take the models whose TCR Screen (likely) in 1.4-2.2º range. Hausfather et al. (2022) select 34 models. At present, I *exclude ACCESS-CM2* because the Pangeo file has incosistent datetime values giving problems (To do.will be fixed in the future). Coefficients for downscaling cannot be calculated for 5 additional models (DKRZ.MPI-ESM1-2-HR.Amon, DWD.MPI-ESM1-2-HR.Amon, MPI-M.MPI-ESM1-2-HR.Amon, NCAR.CESM2-FV2.Amon, NCAR.CESM2-WACCM-FV2.Amon) because they do not have historical data (and cannot be debiased), or do not have SSPs altogether and fail the main need. **This is odd, since Hausfather et al use 34 models - it could be an issue with Pangeo data Todo**. 
 + Limit analysis to the scenarios: historical, SSP126, SSP245, SSP370, SSP585.
 + Monthly data. Daily data would take too long to process
 + `tas`: Near-Surface Air Temperature [K]
@@ -34,7 +33,7 @@ I estimate (1) on data pooling together different model runs (if $m$ is an ensem
 
 ⚠️ Some small countries do not have UDel temperature. Hence, no $\widetilde{T}$. 
 
-<img src="C:\Users\Granella\Dropbox (CMCC)\PhD\Research\impacts\img\diagnostics\UDel_small_countries.png" alt="UDel_small_countries" style="zoom:50%;" />
+<img src="C:\Users\Granella\Dropbox (CMCC)\PhD\Research\impacts\img\diagnostics\UDel_small_countries.png" alt="UDel_small_countries"  />
 
 ## GMT anomaly
 
@@ -51,17 +50,15 @@ The HadCRUT5-MAGCC7 data is matched with de-biased CMIP data on year and scenari
 
 
 
-
-
-
-
 # How to
 
 The main script is `aggregate.py`. It calls functions in `functions.py` and `context.py`.  `udel.py` downloads and cleans UDel data.
 
 # TODO
-+ [ ] Deal with incosistencies in datetime in ACCESS-CM2.
-+ [ ] Why do three models lack SSPs?
++ [ ] Deal with inconsistencies in datetime in ACCESS-CM2.
++ [x] Replicate with non-pop weighted
++ [ ] Run with non-pop weighted
++ [x] Why do three models lack SSPs?
 + [x] Get HadCRUT5, MAGICC7. Harmonize GMT. Merge with main dataframe.
 + [x] Use HadCRUT5+MAGICC7 GMT for regressions.
 + [x] ABW (and what else?) has no UDel-derived temp. <-- Because  not covered by UDel grid
