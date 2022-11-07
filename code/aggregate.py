@@ -155,6 +155,8 @@ for name, ds in pbar:
     ds = xr.combine_by_coords([ds, ds_w])
     # assign 0 weight to (x,y,iso3) cells for which (x,y) do not fall into country iso3
     ds['population'] = ds['population'].fillna(0)
+    # Add area weight
+    ds = ds.assign(area_weight=np.cos(np.deg2rad(ds.y)))  # Rectangular grid: cosine of lat is proportional to grid cell area.
     # keep necessary coords, vars
     ds = ds[['x', 'y', 'time'] + list(ds.keys())]
 
@@ -165,14 +167,14 @@ for name, ds in pbar:
     #     # If member_id is unique and has been dropped
     #     pass
     _ds_weighted = agg_on_space(ds, func='weighted_mean', weight=ds.population)
-    _ds_unweighted = agg_on_space(ds, func='mean', weight=None)
+    _ds_unweighted = agg_on_space(ds, func='weighted_mean', weight=ds.area_weight)
     _ds_unweighted = _ds_unweighted[variables]
     _ds_unweighted = _ds_unweighted.rename({x: x + '_unweighted' for x in variables})
     ds = xr.combine_by_coords([_ds_weighted, _ds_unweighted])
     ds = agg_on_year(ds, func='mean')
 
     # Export
-    ds = ds.drop('population')
+    ds = ds.drop(['population', 'area_weight'])
     ds = ds.reset_coords(drop=True)  # clean up
 
     # Exporting to dataframe is very slow
