@@ -154,9 +154,14 @@ for name, ds in pbar:
     # merge: add population to ds
     ds = xr.combine_by_coords([ds, ds_w])
     # assign 0 weight to (x,y,iso3) cells for which (x,y) do not fall into country iso3
+    not_sea = (ds.population.notnull()) * 1
     ds['population'] = ds['population'].fillna(0)
     # Add area weight
-    ds = ds.assign(area_weight=np.cos(np.deg2rad(ds.y)))  # Rectangular grid: cosine of lat is proportional to grid cell area.
+    area_weight = np.cos(np.deg2rad(ds.y))  # Rectangular grid: cosine of lat is proportional to grid cell area.
+    area_weight = area_weight * not_sea
+    area_weight.name = 'area_weight'
+    ds = xr.combine_by_coords([ds, area_weight])
+
     # keep necessary coords, vars
     ds = ds[['x', 'y', 'time'] + list(ds.keys())]
 
@@ -166,11 +171,11 @@ for name, ds in pbar:
     # except ValueError:
     #     # If member_id is unique and has been dropped
     #     pass
-    _ds_weighted = agg_on_space(ds, func='weighted_mean', weight=ds.population)
-    _ds_unweighted = agg_on_space(ds, func='weighted_mean', weight=ds.area_weight)
-    _ds_unweighted = _ds_unweighted[variables]
-    _ds_unweighted = _ds_unweighted.rename({x: x + '_unweighted' for x in variables})
-    ds = xr.combine_by_coords([_ds_weighted, _ds_unweighted])
+    _ds_pop = agg_on_space(ds, func='weighted_mean', weight=ds.population)
+    _ds_area = agg_on_space(ds, func='weighted_mean', weight=ds.area_weight)
+    _ds_area = _ds_area[variables]
+    _ds_area = _ds_area.rename({x: x + '_area' for x in variables})
+    ds = xr.combine_by_coords([_ds_pop, _ds_area])
     ds = agg_on_year(ds, func='mean')
 
     # Export
@@ -182,7 +187,7 @@ for name, ds in pbar:
         ds = ds.compute()
     df = ds.to_dataframe()
     for var in variables:
-        df[[var, var + '_unweighted']].reset_index().to_parquet(folder + f'/{var}.parq')
+        df[[var, var + '_area']].reset_index().to_parquet(folder + f'/{var}.parq')
 
 # %% Combine results
 cmip_path = Path(context.projectpath() + '/data/out/cmip')
@@ -213,19 +218,25 @@ df = pd.concat(l)
 try:
     df['tas'] += -273.15
     # df['avgtas'] += -273.15
+    df['tas_area'] += -273.15
 except KeyError:
     pass
 # Debias matching historical country temperature to UDel temp for the same period
 # NB does not debias GMT and anomaly
 udel = get_udel()
 df = pd.merge(df, udel, on=['iso3', 'year'], how='left')
+
 bias = df[df.year.between(1980,2014)].groupby(['iso3', 'model'])[['tas', 'udeltas']].mean()
 bias = (bias.tas - bias.udeltas).reset_index().rename(columns={0:'bias'})
 df = pd.merge(df, bias, on=['iso3', 'model'], how='left')
 df['ubtas'] = df['tas'] - df['bias']
 
+bias_area = df[df.year.between(1980,2014)].groupby(['iso3', 'model'])[['tas_area', 'udeltas']].mean()
+bias_area = (bias_area.tas_area - bias_area.udeltas).reset_index().rename(columns={0:'bias_area'})
+df = pd.merge(df, bias_area, on=['iso3', 'model'], how='left')
+df['ubtas_area'] = df['tas_area'] - df['bias_area']
+
 gmt = get_gmt()
-gmt.unstack().reset_index()
 gmt = gmt.reset_index().melt(id_vars='year', var_name='scenario', value_name='gmt')
 
 df = pd.merge(df, gmt, on=['year', 'scenario'], how='left')
