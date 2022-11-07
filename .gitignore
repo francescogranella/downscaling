@@ -1,38 +1,3 @@
-#### Project
-!.gitkeep
-
-.sublime*
-code/sandbox.py
-
-data/in/*
-data/out/*
-data/tmp/*
-img/*
-tables/*
-docs/*
-tmp/*
-
-draft/*.aux
-draft/*.bbl
-draft/*.blg
-draft/*.synctex.gz
-draft/*.bib*
-draft/*.xml
-
-!*.gitkeep
-
-.yml
-.tokens
-
-#### Sublime Text
-*.sublime*
-
-#### PyCharm
-.xml
-.iml
-.idea
-
-
 #### Python
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -449,6 +414,40 @@ TSWLatexianTemp*
 # option is specified. Footnotes are the stored in a file with suffix Notes.bib.
 # Uncomment the next line to have this generated file ignored.
 #*Notes.bib
+
+#### Project
+!.gitkeep
+
+.sublime*
+code/sandbox.py
+
+data/in/*
+data/out/*
+data/tmp/*
+img/*
+tables/*
+docs/*
+tmp/*
+
+draft/*.aux
+draft/*.bbl
+draft/*.blg
+draft/*.synctex.gz
+draft/*.bib*
+draft/*.xml
+
+!*.gitkeep
+
+.yml
+.tokens
+
+#### Sublime Text
+*.sublime*
+
+#### PyCharm
+.xml
+.iml
+.idea
 
 #### Exceptions
 !data/out/coefficients.parq
