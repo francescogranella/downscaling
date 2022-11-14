@@ -94,14 +94,14 @@ pbar = tqdm(datasets_dict.items())
 for name, ds in pbar:
     pbar.set_description(name)
     folder = context.projectpath() + f'/data/out/cmip/{name}'
+    if Path(folder + f'/tas.parq').is_file():
+        continue
     Path(folder).mkdir(parents=True, exist_ok=True)
     try:
         ds = combined_preprocessing(ds)
     except:
         continue
     variables = [x for x in list(ds.keys()) if x in query['variable_id']]
-    if Path(folder + f'/tas.parq').is_file():
-        continue
 
     # deal with pressure levels
     if 'plev' in ds.coords:
@@ -201,23 +201,9 @@ for file in files:
     l.append(_df)
 df = pd.concat(l)
 
-# # Global mean of Surface air temperature
-# files = list(cmip_path.glob('*/tas_global_mean.parq'))
-# l = []
-# for file in files:
-#     _df = pd.read_parquet(file)
-#     _df['model'] = '.'.join([file.parent.stem.split('.')[i] for i in [1, 2, 4]])
-#     _df['scenario'] = file.parent.stem.split('.')[3]
-#     l.append(_df)
-# global_mean = pd.concat(l)
-# global_mean.rename(columns={'tas': 'avgtas'}, inplace=True)
-#
-# df = pd.merge(df, global_mean, on=['year', 'model', 'scenario', 'member_id'], how='left')
-
 # Convert Kelvin to Celsius
 try:
     df['tas'] += -273.15
-    # df['avgtas'] += -273.15
     df['tas_area'] += -273.15
 except KeyError:
     pass
@@ -246,46 +232,43 @@ for c in ['iso3', 'member_id', 'model', 'scenario']:
 
 # Export
 df.round(2).to_parquet(context.projectpath() + '/data/out/data.parq')
+df.groupby(['iso3', 'year'])[['ubtas', 'ubtas_area']].mean().reset_index()\
+    .round(2).to_parquet(context.projectpath() + '/data/out/data_modmean.parq')
+
 
 # %% Estimate coefficients with OLS
 df = pd.read_parquet(context.projectpath() + '/data/out/data.parq')
 
 # estimate
-l = []
+l1, l2 = [], []
 for (iso3, model), g in tqdm(df.groupby(['iso3', 'model'])):
     try:
         g['gmt2'] = g.gmt**2
-        res = smf.ols(formula='ubtas ~ gmt', data=g).fit()
+        res = smf.ols(formula='ubtas ~ gmt', data=g, missing='drop').fit()
+        res_area = smf.ols(formula='ubtas_area ~ gmt', data=g, missing='drop').fit()
     except ValueError:
         continue
     pass
-    _ = pd.read_html(res.summary().tables[1].as_html(), header=0, index_col=0)[0][['coef', 'std err']].stack()
+    cov_type = 'HC1'
+    _ = pd.read_html(res.get_robustcov_results(cov_type=cov_type).summary().tables[1].as_html(), header=0, index_col=0)[0][['coef', 'std err']].stack()
     _ = _.to_frame().T
     _.columns = ['_'.join(x) for x in _.columns]
     _.insert(0, 'iso3', [iso3])
     _.insert(1, 'model', [model])
     _.insert(2, 'r2', [res.rsquared])
-    l.append(_)
-coefs = pd.concat(l).reset_index(drop=True)
+    l1.append(_)
+    _ = pd.read_html(res_area.get_robustcov_results(cov_type=cov_type).summary().tables[1].as_html(), header=0, index_col=0)[0][['coef', 'std err']].stack()
+    _ = _.to_frame().T
+    _.columns = ['_'.join(x) for x in _.columns]
+    _.insert(0, 'iso3', [iso3])
+    _.insert(1, 'model', [model])
+    _.insert(2, 'r2', [res.rsquared])
+    l2.append(_)
+coefs_ = pd.concat(l1).reset_index(drop=True)
+coefs_area = pd.concat(l2).reset_index(drop=True)
+coefs = pd.merge(coefs_, coefs_area, on=['iso3', 'model'], suffixes=('', '_area'))
 coefs.to_parquet(context.projectpath() + '/data/out/coefficients.parq')
-# quadratic
-l = []
-for (iso3, model), g in tqdm(df.groupby(['iso3', 'model'])):
-    try:
-        g['gmt2'] = g.gmt**2
-        res = smf.ols(formula='ubtas ~ gmt + gmt2', data=g).fit()
-    except ValueError:
-        continue
-    pass
-    _ = pd.read_html(res.summary().tables[1].as_html(), header=0, index_col=0)[0][['coef', 'std err']].stack()
-    _ = _.to_frame().T
-    _.columns = ['_'.join(x) for x in _.columns]
-    _.insert(0, 'iso3', [iso3])
-    _.insert(1, 'model', [model])
-    _.insert(2, 'r2', [res.rsquared])
-    l.append(_)
-coefs = pd.concat(l).reset_index(drop=True)
-coefs.to_parquet(context.projectpath() + '/data/out/coefficients_2.parq')
+
 
 missing = set(df.model.unique()) - set(coefs.model.unique())
 asd = df[df.model.isin(list(missing))]
