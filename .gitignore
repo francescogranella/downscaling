@@ -451,3 +451,4 @@ draft/*.xml
 
 #### Exceptions
 !data/out/coefficients.parq
+!data/out/data_modmean.parq
