@@ -9,6 +9,7 @@
 CMIP6 data for such models from [Pangeo](https://gallery.pangeo.io/repos/pangeo-gallery/cmip6/intake_ESM_example.html) and clean with the [XMIP python package](https://cmip6-preprocessing.readthedocs.io/en/latest/tutorial.html).
 
 ## Population weighting
+Population in 2000.
 
 Cells of CMIP6 data are split where crossed by a country border. Then, for each cell compute the population sum. ⚠️The algorithm for computing the zonal statistic isn't exact: it uses all population pixels that *touch* a temperature pixel. It can be improved using [exactextract](https://github.com/isciences/exactextract).
 
@@ -55,6 +56,8 @@ The HadCRUT5-MAGCC7 data is matched with de-biased CMIP data on year and scenari
 The main script is `aggregate.py`. It calls functions in `functions.py` and `context.py`.  `udel.py` downloads and cleans UDel data.
 
 # TODO
++ [ ] Appropriate S.E.s
++ [ ] Document MAGICC7 data (RCPs, SSPs..)
 + [ ] Deal with inconsistencies in datetime in ACCESS-CM2.
 + [x] Replicate with non-pop weighted
 + [ ] Run with non-pop weighted
