@@ -232,8 +232,8 @@ for c in ['iso3', 'member_id', 'model', 'scenario']:
 
 # Export
 df.round(2).to_parquet(context.projectpath() + '/data/out/data.parq')
-df.groupby(['iso3', 'year', 'ssp'])[['ubtas', 'ubtas_area']].mean().reset_index().\
-    groupby(['iso3', 'year'])[['ubtas', 'ubtas_area']].mean().reset_index().round(2)\
+df.groupby(['iso3', 'year', 'model', 'scenario'])[['ubtas', 'ubtas_area']].mean().reset_index()\
+    .groupby(['iso3', 'year', 'scenario'])[['ubtas', 'ubtas_area']].mean().reset_index()\
     .to_parquet(context.projectpath() + '/data/out/data_modmean.parq')
 
 hadcrut5 = get_hadcrut5()
