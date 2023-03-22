@@ -24,9 +24,8 @@ from functions import agg_on_model, agg_on_year, agg_on_space, vectorize_raster,
 
 context.pdsettings()
 
-udel_file_path = Path(context.projectpath() + '/data/out/udel.parq')
-if not udel_file_path.is_file():
 
+def make_udel(udel_file_path):
     # %% Download UDel
     file_path = Path(context.projectpath() + '/data/in/udel/air.mon.mean.v501.nc')
     if not file_path.is_file():
@@ -81,3 +80,36 @@ if not udel_file_path.is_file():
     df = ds.to_dataframe()
     df.reset_index().to_parquet(udel_file_path)
 
+
+def make_udel_grid_level(udel_grid_level_file_path):
+    # %% Download UDel
+    file_path = Path(context.projectpath() + '/data/in/udel/air.mon.mean.v501.nc')
+    if not file_path.is_file():
+        url = 'https://downloads.psl.noaa.gov/Datasets/udel.airt.precip/air.mon.mean.v501.nc'
+        file = requests.get(url)
+        with open(file_path, 'wb') as f:
+            f.write(file.content)
+
+    # %% Open and basic processing
+    ds = xr.open_dataset(file_path)
+    ds = ds.rename({'lat':'y', 'lon':'x', 'air':'udeltas'})
+    # Fix longitude from (0,360) to (-180,180). Has to be before clipping
+    ds = ds.assign_coords({"x": (((ds.x + 180) % 360) - 180)})
+    ds = ds.sortby('x')
+    ds = ds.sortby('y', ascending=False)
+
+    grid = xr.DataArray(dims=('y', 'x'), coords={'y':np.arange(-90,90,0.5), 'x':np.arange(-180,180,0.5)})
+    ds = agg_on_year(ds, func='mean').interp_like(grid)
+    df = ds.to_dataframe()
+    df.reset_index().to_parquet(udel_grid_level_file_path)
+
+
+
+# %%
+udel_file_path = Path(context.projectpath() + '/data/out/udel.parq')
+if not udel_file_path.is_file():
+    make_udel(udel_file_path)
+
+udel_grid_level_file_path = Path(context.projectpath() + '/data/out/udel_grid-level.parq')
+if not udel_grid_level_file_path.is_file():
+    make_udel_grid_level(udel_grid_level_file_path)

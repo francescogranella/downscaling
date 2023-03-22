@@ -245,8 +245,17 @@ def get_udel():
     try:
         return pd.read_parquet(udel_file_path)
     except:
-        import udel
-        return pd.read_parquet(udel_file_path)
+        from udel import make_udel
+        return make_udel(udel_file_path)
+
+
+def get_udel_gridlevel():
+    udel_grid_level_file_path = Path(context.projectpath() + '/data/out/udel_grid_level.parq')
+    try:
+        return pd.read_parquet(udel_grid_level_file_path)
+    except:
+        from udel import make_udel_grid_level
+        return make_udel_grid_level(udel_grid_level_file_path)
 
 
 def get_hadcrut5():
