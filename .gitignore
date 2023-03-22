@@ -453,4 +453,4 @@ draft/*.xml
 !data/out/coefficients.parq
 !data/out/data_modmean.parq
 !data/out/hadcrut5.parq
-!data/out/grid-level/coeffcients.parquet
+!data/out/grid-level/coefficients.parquet
