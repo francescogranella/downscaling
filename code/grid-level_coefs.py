@@ -116,7 +116,7 @@ for name, ds in pbar:
     # Coarsen the grid
     grid = xr.DataArray(dims=('y', 'x'), coords={'y': np.arange(-90, 90, 0.5), 'x': np.arange(-180, 180, 0.5)})
     ds = ds[['x', 'y', 'time'] + list(ds.keys())]
-    ds = agg_on_year(ds, func='mean').interp_like(grid)
+    ds = agg_on_year(ds, func='mean').interp_like(grid, method='nearest')
 
     # Mean over member_id - not used
     ds = ds.mean(dim='member_id')
