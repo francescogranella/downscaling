@@ -184,7 +184,7 @@ for model in pbar:
     df.round(2).to_parquet(model_data_path)
     del df
 
-# %%
+# %% Coefficients
 from joblib import Parallel, delayed
 
 path = Path(r"C:\Users\Granella\Dropbox (CMCC)\PhD\Research\impacts\data\out\grid-level")
@@ -202,24 +202,28 @@ def ols(i, data):
 
 
 for model_data_path in model_data_paths:
-    df = pd.read_parquet(model_data_path)
-    df = df.drop(columns=['year', 'scenario'])
-    gs = df.groupby(['x', 'y'])
-
-    # parallelize the OLS regression on multiple datasets
-    results = Parallel(n_jobs=4)(delayed(ols)(i, dataset) for (i, dataset) in tqdm(gs))
-    coefs = pd.concat(results)
     model = model_data_path.stem[:-5]
-    coefs.to_parquet(context.projectpath() + f'/data/out/grid-level/{model}_coefficients.parquet')
+    print(model)
+    out_path = Path(context.projectpath() + f'/data/out/grid-level/{model}_coefficients.parquet')
+    if out_path.is_file():
+        df = pd.read_parquet(model_data_path)
+        df = df.drop(columns=['year', 'scenario'])
+        gs = df.groupby(['x', 'y'])
 
-# %%
+        # parallelize the OLS regression on multiple datasets
+        results = Parallel(n_jobs=4)(delayed(ols)(i, dataset) for (i, dataset) in tqdm(gs))
+        coefs = pd.concat(results)
+        coefs.to_parquet(out_path)
+    else:
+        continue
+
+# %% All coefficients in one dataset
 path = Path(context.projectpath() + f'/data/out/grid-level')
-coefficient_paths = list(path.glob('*_coefficients.parq'))
+coefficient_paths = list(path.glob('*_coefficients.parquet'))
 
 l = []
 for coefficient_path in coefficient_paths:
-    coefs = pd.read_parquet(coefficient_path).reset_index()
-    coefs = coefs[['x', 'y', 'index', 'Coef.']] \
+    coefs = pd.read_parquet(coefficient_path).reset_index()[['x', 'y', 'index', 'Coef.']] \
         .pivot(index=['x', 'y'], columns=['index'], values='Coef.') \
         .reset_index() \
         .rename(columns={'x': 'lon', 'y': 'lat', 'Intercept': 'intercept'})
@@ -229,7 +233,50 @@ for coefficient_path in coefficient_paths:
 
 df = pd.concat(l, sort=False, ignore_index=True)
 
-df.round(2).to_parquet(context.projectpath() + f'/data/out/grid-level/coeffcients.parquet')
+df.round(2).to_parquet(context.projectpath() + f'/data/out/grid-level/coefficients.parquet')
+
+# %% Model mean temperature
+path = Path(r"C:\Users\Granella\Dropbox (CMCC)\PhD\Research\impacts\data\out\grid-level")
+model_data_paths = list(path.glob('*_data.parquet'))
+
+_df = pl.read_parquet(model_data_paths[0], columns=['scenario'])
+
+l = []
+for scenario in ['ssp126', 'ssp245', 'ssp370', 'ssp585']:
+    l2 = []
+    for model_data_path in tqdm(model_data_paths):
+        _df = pl.read_parquet(model_data_path, columns=['year', 'x', 'y', 'ubtas', 'scenario'])\
+            .filter(pl.col('scenario') == scenario)\
+            .select(['x', 'y', 'year', 'ubtas'])\
+            .with_column(pl.col('year').cast(pl.Int64, strict=False))
+
+        l2.append(_df)
+
+    _df = pl.concat(l2)\
+        .groupby(['x', 'y', 'year'])\
+        .agg(pl.mean('ubtas')).with_column(pl.lit(scenario).alias('scenario'))
+    l.append(_df)
+
+df = pl.concat(l)
+df.write_parquet(context.projectpath() + f'/data/out/grid-level/data_modmean.parquet')
+
+# %% Model mean coefficients
+gmt = get_gmt()
+gmt = gmt.reset_index().melt(id_vars='year', var_name='scenario', value_name='gmt').round(2)
+
+gs = pd.read_parquet(context.projectpath() + f'/data/out/grid-level/data_modmean.parquet')\
+    .merge(gmt, on=['year', 'scenario'], how='inner')\
+    .drop(columns=['year', 'scenario'])\
+    .groupby(['x', 'y'])
+
+# parallelize the OLS regression on multiple datasets
+results = Parallel(n_jobs=4)(delayed(ols)(i, dataset) for (i, dataset) in tqdm(gs))
+coefs = pd.concat(results)
+coefs = coefs.reset_index()[['x', 'y', 'index', 'Coef.']]\
+    .pivot(index=['x', 'y'], columns=['index'], values='Coef.') \
+    .reset_index() \
+    .rename(columns={'x': 'lon', 'y': 'lat', 'Intercept': 'intercept'})
+coefs.round(2).to_parquet(context.projectpath() + f'/data/out/grid-level/coefficients_modmean.parquet')
 
 # %% Plot
 import matplotlib.pyplot as plt
@@ -237,6 +284,7 @@ import cartopy.crs as ccrs
 
 path = Path(context.projectpath() + f'/data/out/grid-level')
 coefficient_paths = list(path.glob('*_coefficients.parq'))
+coefficient_paths.append(Path(context.projectpath() + f'/data/out/grid-level/coefficients_modmean.parquet'))
 
 ncols = int(np.floor(len(coefficient_paths) ** 0.5))
 nrows = int(np.ceil(len(coefficient_paths) / ncols))
@@ -244,25 +292,31 @@ nrows = int(np.ceil(len(coefficient_paths) / ncols))
 # One big figure
 fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 10),
                         sharex=False, sharey=False, subplot_kw={'projection': ccrs.Robinson()},
-                        constrained_layout=True, dpi=150
+                        constrained_layout=True, dpi=50
                         )
 for ax, coefficient_path in zip(axs.flatten(), coefficient_paths):
-    coefs = pd.read_parquet(coefficient_path).reset_index()
-    model = coefficient_path.stem[:-13]
-    coefs = coefs[coefs['index'] == 'gmt']
-
-    coefs_ds = coefs.set_index(['y', 'x']).to_xarray()
+    if coefficient_path.stem != 'coefficients_modmean':
+        coefs = pd.read_parquet(coefficient_path).reset_index()
+        coefs_ds = coefs[coefs['index'] == 'gmt'].set_index(['y', 'x']).to_xarray()
+        model = coefficient_path.stem[:-13]
+        var = 'Coef.'
+    else:
+        coefs_ds = pd.read_parquet(coefficient_path, columns=['lon', 'lat', 'gmt']).set_index(['lat', 'lon']).to_xarray()
+        model = 'Model mean'
+        var = 'gmt'
 
     vmin, vcenter, vmax = -1, 1, 3
     nlevels = 9
     ticks = np.round(np.linspace(vmin, vmax, nlevels), 1)
 
     ax.set_global()
-    cbar_kwargs = {'orientation': 'horizontal', 'shrink': 0.6, 'aspect': 40, 'label': 'Slope', 'ticks': ticks}
-    coefs_ds['Coef.'].plot.contourf(ax=ax, levels=nlevels, transform=ccrs.PlateCarree(), robust=True,
+    cbar_kwargs = {'orientation': 'horizontal', 'shrink': 0.6, 'aspect': 40, 'label': '', 'ticks': ticks}
+    coefs_ds[var].plot.contourf(ax=ax, levels=nlevels, transform=ccrs.PlateCarree(), robust=True,
                                     cbar_kwargs=cbar_kwargs, cmap='coolwarm',
                                     vmin=vmin, vcenter=vcenter, vmax=vmax)
     ax.coastlines()
+    ax.set_title(model, fontsize=5)
+plt.suptitle('Downscaling slope')
 plt.show()
 
 # Multiple figures
