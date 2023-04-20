@@ -456,3 +456,4 @@ draft/*.xml
 !data/out/grid-level
 data/out/grid-level/*
 !data/out/grid-level/coefficients.parquet
+!data/out/grid-level/coefficients_modmean.parquet
