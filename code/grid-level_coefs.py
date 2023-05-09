@@ -110,13 +110,13 @@ for name, ds in pbar:
     ds = ds.sortby('x')
     ds = ds.sortby('y', ascending=False)
     ds = ds.drop(['lat', 'lon'])
-    # Clip to borders of countries [saves memory]
-    ds = ds.rio.write_crs('EPSG:4326')
-    ds = ds.rio.clip(borders.geometry.values, borders.crs, all_touched=True, drop=True)
     # Coarsen the grid
     grid = xr.DataArray(dims=('y', 'x'), coords={'y': np.arange(-90, 90, 0.5), 'x': np.arange(-180, 180, 0.5)})
     ds = ds[['x', 'y', 'time'] + list(ds.keys())]
     ds = agg_on_year(ds, func='mean').interp_like(grid, method='nearest')
+    # Clip to borders of countries [saves memory]
+    ds = ds.rio.write_crs('EPSG:4326')
+    ds = ds.rio.clip(borders.geometry.values, borders.crs, all_touched=True, drop=True)
 
     # Mean over member_id - not used
     ds = ds.mean(dim='member_id')
@@ -153,7 +153,6 @@ for model in pbar:
     model_data_path = Path(context.projectpath() + f'/data/out/grid-level/{model}_data.parquet')
     if model_data_path.is_file():
         continue
-    glob.glob(r"C:\Users\Granella\Dropbox (CMCC)\PhD\Research\impacts\data\out\grid-level/*BCC.BCC-ESM1*")
     files = list(cmip_path.glob(f'*{model}.*/tas.parq*'))  # assumes only Amon
     if len(files) != 5:
         continue

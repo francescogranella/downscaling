@@ -91,18 +91,36 @@ def make_udel_grid_level(udel_grid_level_file_path):
             f.write(file.content)
 
     # %% Open and basic processing
-    ds = xr.open_dataset(file_path)
-    ds = ds.rename({'lat':'y', 'lon':'x', 'air':'udeltas'})
+    import rioxarray as rioxr
+    # ds = xr.open_dataset(file_path)
+    # ds = ds.rename({'lat':'y', 'lon':'x', 'air':'udeltas'})
+    ds = rioxr.open_rasterio(file_path)
     # Fix longitude from (0,360) to (-180,180). Has to be before clipping
     ds = ds.assign_coords({"x": (((ds.x + 180) % 360) - 180)})
     ds = ds.sortby('x')
     ds = ds.sortby('y', ascending=False)
-
+    # Replace _FillVallue with nan
+    ds = ds.where(ds != ds.missing_value)
+    # Set CRS
+    ds = ds.rio.write_crs('EPSG:4326')
+    # Aggregate over time
+    ds = agg_on_year(ds, func='mean')
+    # Declare nan as missing values
+    ds = ds.rio.write_nodata(np.nan)
+    # Fill missing values with the nearest value
+    ds = ds.rio.interpolate_na(method='nearest')
+    # Interpolate to grid
     grid = xr.DataArray(dims=('y', 'x'), coords={'y':np.arange(-90,90,0.5), 'x':np.arange(-180,180,0.5)})
-    ds = agg_on_year(ds, func='mean').interp_like(grid)
+    ds = ds.interp_like(grid, method='nearest')
+    # Clip on country borders. all_touched = True
+    borders = get_borders()
+    ds = ds.rio.clip(borders.geometry.values, borders.crs, all_touched=True, drop=True)
+    #
+    ds.name = 'udeltas'
+    ds = ds.drop('spatial_ref')
+    # To dataframe and export
     df = ds.to_dataframe()
     df.reset_index().to_parquet(udel_grid_level_file_path)
-
 
 
 # %%
