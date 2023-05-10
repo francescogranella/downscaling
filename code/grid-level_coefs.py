@@ -3,8 +3,10 @@ import glob
 from pathlib import Path
 
 import intake
+from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
+import polars as pl
 import statsmodels.formula.api as smf
 import xarray as xr
 from tqdm import tqdm
@@ -132,7 +134,6 @@ for name, ds in pbar:
     ds = ds.compute()
     df = ds.to_dataframe().dropna(subset=['tas'])
     df = df[['tas']].astype(float).round(2)
-    import polars as pl
 
     pl.from_pandas(df.reset_index()).write_parquet(folder + f'/tas.parquet')
     del ds, df
@@ -184,8 +185,6 @@ for model in pbar:
     del df
 
 # %% Coefficients
-from joblib import Parallel, delayed
-
 path = Path(r"C:\Users\Granella\Dropbox (CMCC)\PhD\Research\impacts\data\out\grid-level")
 model_data_paths = list(path.glob('*_data.parquet'))
 
@@ -204,7 +203,7 @@ for model_data_path in model_data_paths:
     model = model_data_path.stem[:-5]
     print(model)
     out_path = Path(context.projectpath() + f'/data/out/grid-level/{model}_coefficients.parquet')
-    if out_path.is_file():
+    if not out_path.is_file():
         df = pd.read_parquet(model_data_path)
         df = df.drop(columns=['year', 'scenario'])
         gs = df.groupby(['x', 'y'])
@@ -285,15 +284,41 @@ path = Path(context.projectpath() + f'/data/out/grid-level')
 coefficient_paths = list(path.glob('*_coefficients.parq'))
 coefficient_paths.append(Path(context.projectpath() + f'/data/out/grid-level/coefficients_modmean.parquet'))
 
-ncols = int(np.floor(len(coefficient_paths) ** 0.5))
-nrows = int(np.ceil(len(coefficient_paths) / ncols))
+coefficient_path = Path(context.projectpath() + f'/data/out/grid-level/coefficients_modmean.parquet')
+coefs_ds = pd.read_parquet(coefficient_path).set_index(['lat', 'lon']).to_xarray()
+coefs_ds = coefs_ds.rename({'gmt':'slope'})
+
+fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(10, 5),
+                        sharex=False, sharey=False, subplot_kw={'projection': ccrs.Robinson()},
+                        constrained_layout=False, dpi=250
+                        )
+for ax, var in list(zip(axs, ['slope', 'intercept'])):
+    if var == 'slope':
+        vmin, vcenter, vmax = -0, 1, 2
+    else:
+        vmin, vcenter, vmax = -40, 0, 40
+    nlevels = 9
+    ticks = np.round(np.linspace(vmin, vmax, nlevels), 1)
+    ax.set_global()
+    cbar_kwargs = {'orientation': 'horizontal', 'shrink': 1., 'aspect': 80, 'label': '', 'ticks': ticks}
+    coefs_ds[var].plot.contourf(ax=ax, levels=nlevels, transform=ccrs.PlateCarree(), robust=True,
+                                cbar_kwargs=cbar_kwargs, cmap='coolwarm',
+                                vmin=vmin, vcenter=vcenter, vmax=vmax)
+    ax.coastlines()
+    ax.set_title(var, fontsize=20)
+    # plt.suptitle('Downscaling slope')
+plt.tight_layout()
+plt.show()
+
 
 # One big figure
-fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 10),
+ncols = int(np.floor(len(coefficient_paths) ** 0.5))
+nrows = int(np.ceil(len(coefficient_paths) / ncols))
+fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(10, 5),
                         sharex=False, sharey=False, subplot_kw={'projection': ccrs.Robinson()},
-                        constrained_layout=True, dpi=50
+                        constrained_layout=True, dpi=250
                         )
-for ax, coefficient_path in zip(axs.flatten(), coefficient_paths):
+for ax, coefficient_path in zip([axs], coefficient_paths):
     if coefficient_path.stem != 'coefficients_modmean':
         coefs = pd.read_parquet(coefficient_path).reset_index()
         coefs_ds = coefs[coefs['index'] == 'gmt'].set_index(['y', 'x']).to_xarray()
@@ -303,12 +328,12 @@ for ax, coefficient_path in zip(axs.flatten(), coefficient_paths):
         coefs_ds = pd.read_parquet(coefficient_path, columns=['lon', 'lat', 'gmt']).set_index(['lat', 'lon']).to_xarray()
         model = 'Model mean'
         var = 'gmt'
-
+    # coefs_ds = coefs_ds.sel(lon=slice(-10,20),lat=slice(36,66))
     vmin, vcenter, vmax = -1, 1, 3
     nlevels = 9
     ticks = np.round(np.linspace(vmin, vmax, nlevels), 1)
 
-    ax.set_global()
+    # ax.set_global()
     cbar_kwargs = {'orientation': 'horizontal', 'shrink': 0.6, 'aspect': 40, 'label': '', 'ticks': ticks}
     coefs_ds[var].plot.contourf(ax=ax, levels=nlevels, transform=ccrs.PlateCarree(), robust=True,
                                     cbar_kwargs=cbar_kwargs, cmap='coolwarm',
