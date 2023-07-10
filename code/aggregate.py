@@ -210,6 +210,7 @@ except KeyError:
 # Debias matching historical country temperature to UDel temp for the same period
 # NB does not debias GMT and anomaly
 udel = get_udel()
+udel.rename(columns={'air':'udeltas'}, inplace=True)
 df = pd.merge(df, udel, on=['iso3', 'year'], how='left')
 
 bias = df[df.year.between(1980,2014)].groupby(['iso3', 'model'])[['tas', 'udeltas']].mean()

@@ -25,25 +25,41 @@ from functions import agg_on_model, agg_on_year, agg_on_space, vectorize_raster,
 context.pdsettings()
 
 
-def make_udel(udel_file_path):
+def make_udel(udel_file_path, var):
+    assert var in ['air', 'precip']
+    if var == 'air':
+        agg_stat = 'mean'
+        agg_stat_year = 'mean'
+    else:
+        agg_stat = 'total'
+        agg_stat_year = 'sum'
     # %% Download UDel
-    file_path = Path(context.projectpath() + '/data/in/udel/air.mon.mean.v501.nc')
+    file_path = Path(context.projectpath() + f'/data/in/udel/{var}t.mon.{agg_stat}.v501.nc')
     if not file_path.is_file():
-        url = 'https://downloads.psl.noaa.gov/Datasets/udel.airt.precip/air.mon.mean.v501.nc'
+        url = f'https://downloads.psl.noaa.gov/Datasets/udel.airt.precip/{var}.mon.{agg_stat}.v501.nc'
         file = requests.get(url)
         with open(file_path, 'wb') as f:
             f.write(file.content)
 
     # %% Open and basic processing
-    ds = xr.open_dataset(file_path)
-    ds = ds.rename({'lat':'y', 'lon':'x', 'air':'udeltas'})
+    ds = rioxr.open_rasterio(file_path)
+    # ds = ds.rename({'lat':'y', 'lon':'x', '{var}':'udeltas'})
     # Fix longitude from (0,360) to (-180,180). Has to be before clipping
     ds = ds.assign_coords({"x": (((ds.x + 180) % 360) - 180)})
     ds = ds.sortby('x')
     ds = ds.sortby('y', ascending=False)
     # # %% Subset time
     # ds = ds.sel(time=slice('1980-01-01', '2014-12-31'))
-
+    # Replace _FillVallue with nan
+    ds = ds.where(ds != ds.missing_value)
+    # Set CRS
+    ds = ds.rio.write_crs('EPSG:4326')
+    # Aggregate over time
+    ds = agg_on_year(ds, func=agg_stat_year)
+    # Declare nan as missing values
+    ds = ds.rio.write_nodata(np.nan)
+    # Fill missing values with the nearest value
+    ds = ds.rio.interpolate_na(method='nearest')
     # %% Prepare population raster
     path = context.projectpath() + r"/data/in/population/gpw-v4-population-count-rev11_2000_2pt5_min_tif/gpw_v4_population_count_rev11_2000_2pt5_min.tif"
     population = prepare_pop(path)
@@ -52,8 +68,16 @@ def make_udel(udel_file_path):
     TEST = False
     if TEST:
         ds = ds.rio.write_crs('EPSG:4326')
-        ds = ds.rio.clip_box(minx=-80,maxx=-60,miny=7,maxy=20)
-
+        ds = ds.rio.clip_box(minx=6,maxx=20,miny=36,maxy=46)
+        countries = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+        countries = countries.loc[countries.iso_a3=='ITA']
+        df = ds.isel(year=0).to_dataframe().reset_index()
+        gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.x, df.y, crs=4326))
+        gdf['geometry'] = gdf['geometry'].buffer(0.25, cap_style=3)
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(5,5), sharex=False, sharey=False)
+        countries.boundary.plot(ax=ax)
+        gdf.plot(ax=ax, column=f'{var}')
+        plt.show()
     # %% Prepare vector
     grid = vectorize_raster(ds)
     # %% Split the grid where it crosses borders. Each cell is split into polygons, each belonging to 1 country
@@ -72,7 +96,7 @@ def make_udel(udel_file_path):
     ds = xr.combine_by_coords([ds, ds_w])
     ds['population'] = ds['population'].fillna(0)
     ds = agg_on_space(ds, func='weighted_mean', weight=ds.population)
-    ds = agg_on_year(ds, func='mean')
+    # ds = agg_on_year(ds, func='mean')
 
     # Export
     ds = ds.drop('population')
@@ -124,9 +148,9 @@ def make_udel_grid_level(udel_grid_level_file_path):
 
 
 # %%
-udel_file_path = Path(context.projectpath() + '/data/out/udel.parq')
+udel_file_path = Path(context.projectpath() + '/data/out/udel_precip.parq')
 if not udel_file_path.is_file():
-    make_udel(udel_file_path)
+    make_udel(udel_file_path, 'precip')
 
 udel_grid_level_file_path = Path(context.projectpath() + '/data/out/udel_grid-level.parq')
 if not udel_grid_level_file_path.is_file():
