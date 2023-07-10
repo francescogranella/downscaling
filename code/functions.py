@@ -81,6 +81,8 @@ def combined_preprocessing_no_unit_correction(ds):
 def _simple_agg(ds, agg_var, func=None, **kwargs):
     if not func:
         return ds
+    if func == 'sum':
+        return ds.sum(agg_var)
     if func == 'mean':
         return ds.mean(agg_var)
     if func == 'median':
@@ -195,13 +197,13 @@ def _count_above_threshold(x, t):
 def vectorize_raster(ds: xr.Dataset) -> gpd.GeoDataFrame:
     """Vectorize raster"""
     # Remove time
-    ds = ds.copy().isel(time=0)
+    ds = ds.copy().isel(year=0)
     # (half) height and width of CMIP6 raster cells
     _lon, _lat = 'x', 'y'
     h = np.diff(ds[_lat].values)[0] / 2
     w = np.diff(ds[_lon].values)[0] / 2
     # Make a vector from the CMIP6 raster
-    df = ds[['y', 'x']].to_dataframe().reset_index()
+    df = ds.to_dataframe().reset_index()
     polygons = []
     for i, row in df.iterrows():
         lat = row[_lat]
@@ -246,7 +248,7 @@ def get_udel():
         return pd.read_parquet(udel_file_path)
     except:
         from udel import make_udel
-        return make_udel(udel_file_path)
+        return make_udel(udel_file_path, 'air')
 
 
 def get_udel_gridlevel():
