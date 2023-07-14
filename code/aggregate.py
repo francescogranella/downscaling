@@ -273,13 +273,26 @@ coefs_area = pd.concat(l2).reset_index(drop=True)
 coefs = pd.merge(coefs_, coefs_area, on=['iso3', 'model'], suffixes=('', '_area'))
 coefs.to_parquet(context.projectpath() + '/data/out/coefficients.parq')
 
-
 missing = set(df.model.unique()) - set(coefs.model.unique())
 asd = df[df.model.isin(list(missing))]
 asd['model'] = asd.model.astype('str')
 asd['scenario'] = asd.scenario.astype('str')
 asd = asd.groupby(['model', 'scenario']).count().reset_index()
 pd.crosstab(asd.model, asd.scenario)
+
+# Export with RICE50x-consistent name
+# Data modmean
+sspdb_cmip6_modmean_iso3 = pd.read_parquet(context.projectpath() + '/data/out/data_modmean.parq')
+sspdb_cmip6_modmean_iso3.to_parquet(context.projectpath() + '/data/out/sspdb_cmip6_modmean_iso3.parquet')
+# Coefficients
+vars_dict = {"r2": "r2_temp_pop", "Intercept_coef": "alpha_temp_pop", "gmt_coef": "beta_temp_pop", "r2_area": "r2_temp_area", "Intercept_coef_area": "alpha_temp_area", "gmt_coef_area": "beta_temp_area"}
+pd.read_parquet(context.projectpath() + '/data/out/coefficients.parq').rename(columns=vars_dict)\
+    .groupby(['iso3'])[list(vars_dict.values())]\
+    .mean()\
+    .reset_index().merge(
+    sspdb_cmip6_modmean_iso3[sspdb_cmip6_modmean_iso3.year.between(1980, 2012)].groupby('iso3')['ubtas'].mean().reset_index().rename(columns={'ubtas':'base_temp'})
+    , on='iso3', how='left')\
+    .to_parquet(context.projectpath() + '/data/out/cmip6_downscaling_coef.parquet')
 
 # %% Plot temperature
 import matplotlib.pyplot as plt

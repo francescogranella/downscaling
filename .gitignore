@@ -3,8 +3,12 @@
 !.gitkeep
 !data/out/coefficients.parq
 !data/out/data_modmean.parq
+!data/out/cmip6_downscaling_coef.parquet
+!data/out/sspdb_cmip6_modmean_iso3.parquet
 !data/out/hadcrut5.parq
 !data/out/grid-level
 data/out/grid-level/*
 !data/out/grid-level/coefficients.parquet
 !data/out/grid-level/coefficients_modmean.parquet
+!data/in/.gitkeep
+!data/tmp/.gitkeep
