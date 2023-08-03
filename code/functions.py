@@ -197,13 +197,13 @@ def _count_above_threshold(x, t):
 def vectorize_raster(ds: xr.Dataset) -> gpd.GeoDataFrame:
     """Vectorize raster"""
     # Remove time
-    ds = ds.copy().isel(year=0)
+    ds = ds.copy().isel(time=0)
     # (half) height and width of CMIP6 raster cells
     _lon, _lat = 'x', 'y'
     h = np.diff(ds[_lat].values)[0] / 2
     w = np.diff(ds[_lon].values)[0] / 2
     # Make a vector from the CMIP6 raster
-    df = ds.to_dataframe().reset_index()
+    df = ds[['y', 'x']].to_dataframe().reset_index()
     polygons = []
     for i, row in df.iterrows():
         lat = row[_lat]
