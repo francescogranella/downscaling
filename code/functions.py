@@ -296,18 +296,19 @@ def get_gmt(diagnostic_plots=False):
         plt.savefig(context.projectpath() + '/img/diagnostics/magicc7_hadcrut5_gap.png')
         plt.show()
 
-    # Shift MAGICC7 GMT to match HadCRUT5 over 1995-2014
+    # Shift HadCRUT5 to match MAGICC7 GMT over 1995-2014
     # MAGICC7 GMT anomaly is the same across SSP until 2014 (observed data)
     # Mean 1995-2014
     magicc7_reference = df[df.year.between(1995,2014)].set_index('year').mean().mean()
     hadcrut5_reference = hadcrut5[hadcrut5.year.between(1995,2014)].historical.mean()
     # Gap
-    gap = hadcrut5_reference - magicc7_reference
+    gap = magicc7_reference - hadcrut5_reference
     # Close the gap
-    df = df.set_index('year') + gap
+    hadcrut5 = hadcrut5.set_index('year') + gap
+    df = pd.merge(df, hadcrut5.reset_index(), on='year', how='outer').sort_values(by='year')
     # Plot
     if diagnostic_plots:
-        pd.merge(df, hadcrut5, on='year', how='outer').set_index('year').plot()
+        df.set_index('year').plot()
         plt.savefig(context.projectpath() + '/img/diagnostics/magicc7_hadcrut5_nogap.png')
         plt.show()
 
