@@ -60,6 +60,8 @@ screened_models = _models.loc[_models['TCR Screen (likely) 1.4-2.2º'] == 'Y', '
 assert bool(set(screened_models) & set(source_ids))
 
 screened_models = [x for x in screened_models if x!='ACCESS-CM2']
+screened_models.remove('CESM2'),  # CESM2 raises intake_esm.merge_util.AggregationError
+screened_models.remove('CESM2-WACCM'),  # CESM2-WACCM raises intake_esm.merge_util.AggregationError
 # load multiple models at once
 experiments = ['historical', 'ssp585', 'ssp370', 'ssp245', 'ssp126']
 query = dict(
@@ -67,7 +69,7 @@ query = dict(
     experiment_id=experiments,
     table_id=['Amon'],
     source_id=screened_models,
-    variable_id=['tas'],
+    variable_id=['tas', 'pr'],
     grid_label=['gn', 'gr', 'gr1'],
     # member_id=['r1i1p1f1']
 )
@@ -94,7 +96,7 @@ pbar = tqdm(datasets_dict.items())
 for name, ds in pbar:
     pbar.set_description(name)
     folder = context.projectpath() + f'/data/out/cmip/{name}'
-    if Path(folder + f'/tas.parq').is_file():
+    if Path(folder + f'/tas.parq').is_file() and Path(folder + f'/pr.parq').is_file():
         continue
     Path(folder).mkdir(parents=True, exist_ok=True)
     try:
