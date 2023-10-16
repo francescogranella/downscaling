@@ -43,7 +43,7 @@ To match the GMT anomaly of WITCH as close as possible, I use:
 1. [HadCRUT5](https://crudata.uea.ac.uk/cru/data/temperature/) for historical data.
 2. MAGICC7 for SSPs
 
-Since they are discontinuous, I'm shifting the GMT anomaly from MAGICC7 to match the HadCRUT5 (historical) over 1995-2014.  MAGICC7 GMT anomaly is the same across SSP from 1995 until 2014 (observed data).
+Since they are discontinuous, I'm shifting the GMT anomaly from HadCRUT5 (historical) to match MAGICC7 over 1995-2014.  MAGICC7 GMT anomaly is the same across SSP from 1995 until 2014 (observed data).
 
 <img src="C:\Users\Granella\Dropbox (CMCC)\PhD\Research\impacts\img\diagnostics\magicc7_hadcrut5_gap.png" alt="magicc7_hadcrut5_gap" style="zoom:67%;" /><img src="C:\Users\Granella\Dropbox (CMCC)\PhD\Research\impacts\img\diagnostics\magicc7_hadcrut5_nogap.png" alt="magicc7_hadcrut5_nogap" style="zoom:67%;" />
 
