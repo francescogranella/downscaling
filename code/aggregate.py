@@ -239,6 +239,9 @@ df.groupby(['iso3', 'year', 'model', 'scenario'])[['ubtas', 'ubtas_area']].mean(
     .groupby(['iso3', 'year', 'scenario'])[['ubtas', 'ubtas_area']].mean().reset_index()\
     .to_parquet(context.projectpath() + '/data/out/data_modmean.parq')
 
+bias.to_parquet(context.projectpath() + '/data/out/bias.parquet')
+bias_area.to_parquet(context.projectpath() + '/data/out/bias_area.parquet')
+
 hadcrut5 = get_hadcrut5()
 hadcrut5.to_parquet(context.projectpath() + '/data/out/hadcrut5.parq')
 
